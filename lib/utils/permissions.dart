@@ -4,11 +4,15 @@ import 'package:permission_handler/permission_handler.dart';
 
 Future<void> ensurePermissions() async {
   if (Platform.isAndroid) {
-    // Android 10 미만에서만 저장소 권한 요청 (MVP: 앱 전용 디렉토리 저장)
-    // 실제로는 device_info_plus 패키지로 정확한 SDK 버전을 가져오는 것이 좋습니다.
-    if (!await Permission.storage.isGranted) {
+    var status = await Permission.storage.status;
+    if (status.isDenied) {
+      // 첫 권한 요청
       await Permission.storage.request();
+    } else if (status.isPermanentlyDenied) {
+      // 사용자가 권한을 영구적으로 거부한 경우
+      // 앱 설정으로 이동하여 직접 권한을 켜도록 안내
+      openAppSettings();
     }
   }
-  // iOS의 경우 Info.plist에 권한 설명이 추가되어 있어야 합니다.
+  // iOS는 Info.plist로 처리하므로 별도 코드는 불필요
 }
