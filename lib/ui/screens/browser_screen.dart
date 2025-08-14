@@ -2,15 +2,15 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:background_downloader/background_downloader.dart'; // Task 타입을 위해 import
 import 'package:video_saver/models/download_record.dart';
 import 'package:video_saver/services/download_service.dart';
 import 'package:video_saver/services/settings_service.dart';
-import 'package:video_saver/ui/widgets/browser_app_bar.dart'; // <-- Import 추가
+import 'package:video_saver/ui/widgets/browser_app_bar.dart';
 import 'package:video_saver/ui/widgets/downloads_bar.dart';
 import 'package:video_saver/ui/widgets/settings_sheet.dart';
 import 'package:video_saver/utils/constants.dart';
 import 'package:video_saver/utils/permissions.dart';
-import 'package:background_downloader/background_downloader.dart';
 
 class BrowserScreen extends StatefulWidget {
   const BrowserScreen({super.key});
@@ -36,29 +36,32 @@ class _BrowserScreenState extends State<BrowserScreen> {
     ensurePermissions();
     _loadAndApplySettings();
 
-    // 다운로드 서비스 콜백 등록
     downloadService.registerCallbacks(
       onStatusUpdate: (update) {
         if (!mounted) return;
-        setState(() {
+        // orElse를 사용하지 않고, 해당 task가 리스트에 반드시 존재한다고 가정합니다.
+        try {
           final rec = downloads.firstWhere(
             (r) => r.task.taskId == update.task.taskId,
           );
-          rec.status = update.status;
-        });
+          setState(() => rec.status = update.status);
+        } catch (e) {
+          // print('Status update for unknown task: ${update.task.taskId}');
+        }
       },
       onProgressUpdate: (update) {
         if (!mounted) return;
-        setState(() {
+        try {
           final rec = downloads.firstWhere(
             (r) => r.task.taskId == update.task.taskId,
           );
-          rec.progress = update.progress;
-        });
+          setState(() => rec.progress = update.progress);
+        } catch (e) {
+          // print('Progress update for unknown task: ${update.task.taskId}');
+        }
       },
-      // 👇 이 부분의 task 타입을 수정합니다.
+      // 👇 이전 지적해주신 대로 `DownloadTask`가 아닌 `Task` 타입을 받도록 수정했습니다.
       onDownloadComplete: (Task task, String filePath) {
-        // <-- 수정: DownloadTask -> Task
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -76,7 +79,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
 
   Future<void> _loadAndApplySettings() async {
     await settingsService.loadSettings();
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _go() async {
@@ -84,6 +87,71 @@ class _BrowserScreenState extends State<BrowserScreen> {
     if (url.isEmpty) return;
     final uri = url.startsWith('http') ? url : 'https://$url';
     await _webCtrl?.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+  }
+
+  /// JavaScript에서 동영상 정보를 받았을 때 호출되는 함수
+  void _handleVideoFound(List<dynamic> args) {
+    if (args.isEmpty) return;
+    final payload = jsonDecode(args.first as String);
+    final List sources = payload['sources'] ?? [];
+
+    if (!mounted) return;
+
+    if (sources.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('다운로드 가능한 소스를 찾지 못했어요 (blob/DRM 제외).')),
+      );
+      return;
+    }
+
+    // 화질 선택 UI 표시
+    _showQualitySheet(
+      sources.map((e) => Map<String, dynamic>.from(e)).toList(),
+    );
+  }
+
+  /// 사용자에게 화질을 선택할 수 있는 UI (바텀 시트)를 보여주는 함수
+  Future<void> _showQualitySheet(List<Map<String, dynamic>> sources) async {
+    final selectedSource = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: sources.length,
+            itemBuilder: (c, i) {
+              final s = sources[i];
+              final label = s['label'] ?? 'video';
+              final url = s['url'] ?? '';
+              return ListTile(
+                leading: const Icon(Icons.video_file_outlined),
+                title: Text('화질: $label'),
+                subtitle: Text(
+                  url,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onTap: () => Navigator.of(c).pop(s),
+              );
+            },
+            separatorBuilder: (_, __) => const Divider(height: 1),
+          ),
+        );
+      },
+    );
+
+    if (selectedSource != null) {
+      final url = selectedSource['url'] as String?;
+      if (url == null || url.isEmpty) return;
+
+      if (url.toLowerCase().contains('.m3u8')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('HLS(m3u8)는 현재 지원하지 않아요.')),
+        );
+        return;
+      }
+      _enqueueDownload(url);
+    }
   }
 
   Future<void> _enqueueDownload(String url) async {
@@ -113,58 +181,12 @@ class _BrowserScreenState extends State<BrowserScreen> {
     await downloadService.enqueue(task);
   }
 
-  void _showQualitySheet(List<Map<String, dynamic>> sources) {
-    if (!mounted) return;
-    final selected =
-        showModalBottomSheet<Map<String, dynamic>>(
-          context: context,
-          builder: (ctx) {
-            return SafeArea(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemBuilder: (c, i) {
-                  final s = sources[i];
-                  final label = s['label'] ?? 'video';
-                  final url = s['url'] ?? '';
-                  return ListTile(
-                    leading: const Icon(Icons.video_file),
-                    title: Text(label),
-                    subtitle: Text(
-                      url,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () => Navigator.of(c).pop(s),
-                  );
-                },
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemCount: sources.length,
-              ),
-            );
-          },
-        ).then((selected) {
-          if (selected != null) {
-            final u = selected['url'] as String;
-            if (u.toLowerCase().contains('.m3u8')) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('HLS(m3u8)는 MVP에서 직접 MP4 저장을 지원하지 않아요.'),
-                ),
-              );
-              return;
-            }
-            _enqueueDownload(selected['url'] as String);
-          }
-        });
-  }
-
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       top: false,
       bottom: true,
       child: Scaffold(
-        // AppBar를 BrowserAppBar 위젯으로 교체
         appBar: BrowserAppBar(
           urlController: _urlCtrl,
           onGo: _go,
@@ -189,28 +211,7 @@ class _BrowserScreenState extends State<BrowserScreen> {
                   _webCtrl = ctrl;
                   ctrl.addJavaScriptHandler(
                     handlerName: 'onVideoFound',
-                    callback: (args) {
-                      if (args.isEmpty) return;
-                      final payload = jsonDecode(args.first as String);
-                      final List sources = payload['sources'] ?? [];
-                      if (sources.isEmpty) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                '다운로드 가능한 소스를 찾지 못했어요 (blob/DRM 제외).',
-                              ),
-                            ),
-                          );
-                        }
-                        return;
-                      }
-                      _showQualitySheet(
-                        sources
-                            .map((e) => Map<String, dynamic>.from(e))
-                            .toList(),
-                      );
-                    },
+                    callback: _handleVideoFound,
                   );
                 },
                 onLoadStop: (ctrl, url) async {
