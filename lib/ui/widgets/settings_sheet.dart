@@ -7,17 +7,16 @@ Future<void> showSettingsSheet({
   required SettingsService settingsService,
   required VoidCallback onSettingsSaved,
 }) async {
-  final controller = TextEditingController(
-    text: settingsService.whitelist.join('\n'),
-  );
+  // --- 👇 [수정] whitelist 관련 controller 삭제 ---
+  // final controller = TextEditingController(text: settingsService.whitelist.join('\n'));
   bool wifiOnly = settingsService.wifiOnly;
+  // --- 👆 [수정] ---
 
   final result = await showModalBottomSheet<bool>(
     context: context,
-    isScrollControlled: true, // 키보드가 올라올 때 UI가 가려지지 않도록 함
+    isScrollControlled: true,
     builder: (_) {
       return StatefulBuilder(
-        // BottomSheet 내부에서 상태 변경을 위해 사용
         builder: (BuildContext context, StateSetter setState) {
           return SafeArea(
             child: Padding(
@@ -30,20 +29,12 @@ Future<void> showSettingsSheet({
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
-                    '허용 도메인 (줄바꿈으로 구분)',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: controller,
-                    maxLines: 6,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'example.org\nmysite.com',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  // --- 👇 [수정] 허용 도메인 UI 부분 전체 삭제 ---
+                  // const Text('허용 도메인...'),
+                  // const SizedBox(height: 8),
+                  // TextField(...),
+                  // const SizedBox(height: 12),
+                  // --- 👆 [수정] ---
                   SwitchListTile(
                     title: const Text('와이파이에서만 다운로드'),
                     value: wifiOnly,
@@ -64,15 +55,10 @@ Future<void> showSettingsSheet({
   );
 
   if (result == true) {
-    final newWhitelist = controller.text
-        .split('\n')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    await settingsService.saveSettings(
-      newWhitelist: newWhitelist,
-      newWifiOnly: wifiOnly,
-    );
+    // --- 👇 [수정] whitelist 관련 로직 삭제 ---
+    // final newWhitelist = controller.text.split('\n').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    await settingsService.saveSettings(newWifiOnly: wifiOnly);
+    // --- 👆 [수정] ---
     onSettingsSaved();
     if (context.mounted) {
       ScaffoldMessenger.of(

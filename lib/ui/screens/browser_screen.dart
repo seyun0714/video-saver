@@ -3,15 +3,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:background_downloader/background_downloader.dart'; // Task 타입을 위해 import
-import 'package:video_saver/models/download_record.dart';
-import 'package:video_saver/services/download_service.dart';
 import 'package:video_saver/services/settings_service.dart';
 import 'package:video_saver/ui/widgets/browser_app_bar.dart';
 import 'package:video_saver/ui/widgets/downloads_bar.dart';
 import 'package:video_saver/ui/widgets/settings_sheet.dart';
 import 'package:video_saver/utils/constants.dart';
-import 'package:video_saver/utils/permissions.dart';
 import 'package:video_saver/providers/download_provider.dart';
 import 'package:video_saver/providers/settings_provider.dart';
 
@@ -24,7 +20,7 @@ class BrowserScreen extends ConsumerStatefulWidget {
 
 class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   final TextEditingController _urlCtrl = TextEditingController(
-    text: 'https://example.org',
+    text: 'https://www.pexels.com/videos/',
   );
   InAppWebViewController? _webCtrl;
   double _progress = 0;
@@ -52,15 +48,6 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     String url, {
     required SettingsService settings,
   }) async {
-    final host = Uri.parse(url).host.toLowerCase();
-    if (!settings.isAllowedDomain(host)) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('허용되지 않은 도메인입니다: $host')));
-      }
-      return;
-    }
     final referer = await _webCtrl?.getUrl();
     final userAgent = (await _webCtrl?.getSettings())?.userAgent;
 
@@ -71,7 +58,6 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
       userAgent: userAgent,
     );
 
-    // downloadsProvider의 Notifier를 통해 상태 변경
     await ref.read(downloadsProvider.notifier).enqueueDownload(task);
   }
 
@@ -182,8 +168,16 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                   javaScriptEnabled: true,
                   mediaPlaybackRequiresUserGesture: false,
                   allowsInlineMediaPlayback: true,
-                  useOnLoadResource: true,
                 ),
+                onPermissionRequest: (controller, request) async {
+                  return PermissionResponse(
+                    resources: request.resources,
+                    action: PermissionResponseAction.GRANT,
+                  );
+                },
+                onConsoleMessage: (controller, consoleMessage) {
+                  print("From WebView: ${consoleMessage.message}");
+                },
                 onWebViewCreated: (ctrl) {
                   _webCtrl = ctrl;
                   ctrl.addJavaScriptHandler(
@@ -207,8 +201,8 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                   // --- 👆 [3단계] 페이지 로드 완료 시 버튼 상태 업데이트 ---
                   await ctrl.evaluateJavascript(source: videoObserverJS);
                 },
-                onLoadResource: (ctrl, res) async {
-                  await ctrl.evaluateJavascript(source: videoObserverJS);
+                onLoadResource: (ctrl, res) {
+                  // 이 콜백은 매우 자주 호출되므로 무거운 작업을 하지 않습니다.
                 },
                 onProgressChanged: (ctrl, p) {
                   setState(() {
@@ -223,7 +217,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
         ),
         floatingActionButton: settingsServiceAsyncValue.when(
           data: (settings) => FloatingActionButton.extended(
-            label: const Text('테스트 MP4'),
+            label: const Text('테스트 다운로드'),
             icon: const Icon(Icons.download),
             onPressed: () {
               const testUrl =
@@ -231,7 +225,11 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
               _enqueueDownload(testUrl, settings: settings);
             },
           ),
-          loading: () => const CircularProgressIndicator(),
+          // 설정 로딩 중에는 버튼 비활성화
+          loading: () => const FloatingActionButton(
+            onPressed: null,
+            child: CircularProgressIndicator(),
+          ),
           error: (e, s) => const SizedBox.shrink(),
         ),
       ),

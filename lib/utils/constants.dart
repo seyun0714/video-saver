@@ -1,104 +1,92 @@
 // lib/utils/constants.dart
 
-// JS: <video> 감지 + 우하단 버튼 삽입
-const String videoObserverJS = '''
- // 개선된 JavaScript 코드
-const videoSaverObserver = new MutationObserver((mutations) => {
-  for (const mutation of mutations) {
-    if (mutation.type === 'childList') {
-      mutation.addedNodes.forEach(node => {
-        if (node.nodeType === 1) { // ELEMENT_NODE
-          // 새로 추가된 노드 또는 그 자식 노드에서 video 태그를 찾음
-          const videos = node.matches('video') ? [node] : node.querySelectorAll('video');
-          addDownloadButton(videos);
-        }
-      });
-    }
+// JS: 클릭 이벤트 및 다운로드 실행 문제를 모두 해결한 최종 버전
+const String videoObserverJS = r'''
+// --- 👇 [최종 수정] 전체 스크립트 로직 개선 ---
+// 기존 옵저버가 있다면 재사용하거나 새로 만듭니다.
+window.videoSaverObserver?.disconnect();
+
+// 디바운스 로직은 유지합니다.
+let debounceTimer;
+const debouncedRun = () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(findAllVideos, 500);
+};
+
+function addDownloadButton(video) {
+  const parent = video.parentElement;
+  if (!parent || parent.querySelector('.video-saver-btn')) {
+    return;
   }
-});
+  
+  if (window.getComputedStyle(parent).position === 'static') {
+    parent.style.position = 'relative';
+  }
 
-function addDownloadButton(videos) {
-  videos.forEach((video) => {
-    // 이미 버튼이 추가된 비디오는 건너뜀
-    if (video.parentElement.querySelector('.video-saver-btn')) {
-      return;
+  const btn = document.createElement('div');
+  btn.className = 'video-saver-btn';
+  btn.innerHTML = '<span>⬇</span>';
+  
+  // 스타일 적용
+  Object.assign(btn.style, {
+    position: 'absolute',
+    right: '10px', bottom: '10px',
+    width: '40px', height: '40px',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    borderRadius: '50%', zIndex: '2147483647',
+    display: 'flex', alignItems: 'center',
+    justifyContent: 'center', cursor: 'pointer',
+    color: 'white'
+  });
+
+  // 클릭 이벤트가 비디오로 전파되는 것을 막는 가장 확실한 방법
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log("VideoSaver: Download button clicked.");
+
+    const sources = [];
+    const sourceTags = video.querySelectorAll('source');
+    
+    sourceTags.forEach(source => {
+      if (source.src && !source.src.startsWith('blob:')) {
+        sources.push({ url: source.src, label: source.getAttribute('size') || source.getAttribute('title') || 'SD' });
+      }
+    });
+
+    if (sources.length === 0 && video.currentSrc && !video.currentSrc.startsWith('blob:')) {
+       sources.push({ url: video.currentSrc, label: 'Default' });
     }
+    
+    if (sources.length > 0) {
+      console.log(`VideoSaver: Found ${sources.length} source(s). Calling Flutter.`);
+      window.flutter_inappwebview.callHandler('onVideoFound', JSON.stringify({ sources: sources }));
+    } else {
+      console.log("VideoSaver: No downloadable sources found for this video.");
+    }
+  }, true); // Use capture phase to handle the event first
 
-    const btn = document.createElement('button');
-    btn.innerText = '⬇';
-    btn.className = 'video-saver-btn'; // 중복 추가를 막기 위한 클래스
-    btn.style.position = 'absolute';
-    btn.style.right = '8px';
-    btn.style.bottom = '8px';
-    btn.style.zIndex = 999999;
-    btn.style.backgroundColor = 'rgba(0,0,0,0.6)';
-    btn.style.color = 'white';
-    btn.style.border = 'none';
-    btn.style.borderRadius = '4px';
-    btn.style.fontSize = '16px';
-    btn.style.cursor = 'pointer';
+  parent.appendChild(btn);
+}
 
-    btn.onclick = (e) => {
-      e.stopPropagation(); // 비디오 재생/일시정지 이벤트 방지
-      const sources = [];
-      
-      // 1. <source> 태그에서 화질별 URL 수집
-      const sourceTags = video.querySelectorAll('source');
-      sourceTags.forEach(source => {
-        if (source.src && !source.src.startsWith('blob:')) {
-          sources.push({
-            url: source.src,
-            label: source.getAttribute('size') || source.getAttribute('title') || 'SD'
-          });
-        }
-      });
-
-      // 2. <source> 태그가 없는 경우, video 태그의 src 속성 사용
-      if (sources.length === 0 && video.currentSrc && !video.currentSrc.startsWith('blob:')) {
-         sources.push({
-           url: video.currentSrc,
-           label: 'Default'
-         });
+function findAllVideos() {
+  document.querySelectorAll('video').forEach(addDownloadButton);
+  document.querySelectorAll('iframe').forEach(frame => {
+    try {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      if (doc) {
+        doc.querySelectorAll('video').forEach(addDownloadButton);
       }
-      
-      // 3. 수집된 소스가 있을 경우에만 Flutter로 데이터 전송
-      if (sources.length > 0) {
-        window.flutter_inappwebview.callHandler('onVideoFound', JSON.stringify({
-          page: location.href,
-          sources: sources
-        }));
-      }
-    };
-
-    video.parentElement.style.position = 'relative';
-    video.parentElement.appendChild(btn);
+    } catch (e) { /* Cross-origin iframe */ }
   });
 }
 
-function observeVideosInFrames() {
-    // 현재 문서의 비디오에 버튼 추가
-    addDownloadButton(document.querySelectorAll('video'));
-    
-    // iframe 내부의 비디오에도 버튼 추가
-    document.querySelectorAll('iframe').forEach(frame => {
-        try {
-            const doc = frame.contentDocument || frame.contentWindow.document;
-            if (doc) {
-                addDownloadButton(doc.querySelectorAll('video'));
-            }
-        } catch(e) {
-            // console.error('Cannot access iframe content:', e);
-        }
-    });
-}
-
-
-// 초기 실행
-observeVideosInFrames();
-
-// DOM 변경 감지 시작
-videoSaverObserver.observe(document.body, {
+findAllVideos();
+window.videoSaverObserver = new MutationObserver(debouncedRun);
+window.videoSaverObserver.observe(document.body, {
   childList: true,
   subtree: true
 });
+// --- 👆 [최종 수정] ---
 ''';
