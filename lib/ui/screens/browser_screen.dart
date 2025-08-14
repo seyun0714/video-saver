@@ -29,6 +29,9 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   InAppWebViewController? _webCtrl;
   double _progress = 0;
 
+  bool _canGoBack = false;
+  bool _canGoForward = false;
+
   @override
   void initState() {
     super.initState();
@@ -165,6 +168,11 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
             });
           },
           progress: _progress,
+          onBack: () => _webCtrl?.goBack(),
+          onForward: () => _webCtrl?.goForward(),
+          onReload: () => _webCtrl?.reload(),
+          canGoBack: _canGoBack,
+          canGoForward: _canGoForward,
         ),
         body: Column(
           children: [
@@ -189,6 +197,14 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                   );
                 },
                 onLoadStop: (ctrl, url) async {
+                  // --- 👇 [3단계] 페이지 로드 완료 시 버튼 상태 업데이트 ---
+                  final back = await ctrl.canGoBack();
+                  final forward = await ctrl.canGoForward();
+                  setState(() {
+                    _canGoBack = back;
+                    _canGoForward = forward;
+                  });
+                  // --- 👆 [3단계] 페이지 로드 완료 시 버튼 상태 업데이트 ---
                   await ctrl.evaluateJavascript(source: videoObserverJS);
                 },
                 onLoadResource: (ctrl, res) async {

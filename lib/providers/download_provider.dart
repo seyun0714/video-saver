@@ -4,10 +4,8 @@ import 'package:background_downloader/background_downloader.dart';
 import 'package:video_saver/models/download_record.dart';
 import 'package:video_saver/services/download_service.dart';
 
-// 다운로드 서비스 프로바이더
 final downloadServiceProvider = Provider((ref) => DownloadService());
 
-// 다운로드 목록 상태를 관리하는 Notifier
 class DownloadsNotifier extends StateNotifier<List<DownloadRecord>> {
   DownloadsNotifier(this.ref) : super([]) {
     _registerCallbacks();
@@ -39,9 +37,8 @@ class DownloadsNotifier extends StateNotifier<List<DownloadRecord>> {
                   record,
             ];
           },
-          // 완료 시 UI 알림은 화면(View)에서 처리하는 것이 더 적합하므로 여기서는 목록 관리만 합니다.
           onDownloadComplete: (task, filePath) {
-            // 완료된 항목을 처리하는 로직 (예: DB 저장)이 필요하다면 여기에 추가
+            // 완료 시 로직
           },
         );
   }
@@ -50,9 +47,25 @@ class DownloadsNotifier extends StateNotifier<List<DownloadRecord>> {
     await ref.read(downloadServiceProvider).enqueue(task);
     state = [...state, DownloadRecord(task: task)];
   }
+
+  // --- 👇 [3단계] Notifier에 관리 메소드 추가 ---
+  Future<void> pauseDownload(DownloadRecord record) async {
+    await ref.read(downloadServiceProvider).pause(record.task);
+  }
+
+  Future<void> resumeDownload(DownloadRecord record) async {
+    await ref.read(downloadServiceProvider).resume(record.task);
+  }
+
+  Future<void> cancelDownload(DownloadRecord record) async {
+    await ref.read(downloadServiceProvider).cancel(record.task);
+    // 상태 리스트에서 즉시 제거하여 UI에 반영
+    state = state.where((r) => r.task.taskId != record.task.taskId).toList();
+  }
+
+  // --- 👆 [3단계] Notifier에 관리 메소드 추가 ---
 }
 
-// 다운로드 Notifier 프로바이더
 final downloadsProvider =
     StateNotifierProvider<DownloadsNotifier, List<DownloadRecord>>((ref) {
       return DownloadsNotifier(ref);

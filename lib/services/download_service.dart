@@ -4,7 +4,16 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 class DownloadService {
-  // ... (createDownloadTask, enqueue, shareFile, _suggestFileNameFromUrl 함수는 동일)
+  Future<bool> pause(Task task) => FileDownloader().pause(task as DownloadTask);
+
+  Future<bool> resume(Task task) =>
+      FileDownloader().resume(task as DownloadTask);
+
+  // 👇 [수정] 잘못된 'cancel' 메소드를 'cancelTasksWithIds'로 변경
+  Future<bool> cancel(Task task) =>
+      FileDownloader().cancelTasksWithIds([task.taskId]);
+  // 👆 [수정]
+
   Future<DownloadTask> createDownloadTask({
     required String url,
     String? referer,
@@ -39,8 +48,7 @@ class DownloadService {
   void registerCallbacks({
     required Function(TaskStatusUpdate) onStatusUpdate,
     required Function(TaskProgressUpdate) onProgressUpdate,
-    required Function(Task, String)
-    onDownloadComplete, // <-- 수정: DownloadTask -> Task
+    required Function(Task, String) onDownloadComplete,
   }) {
     FileDownloader().registerCallbacks(
       taskStatusCallback: (update) {
