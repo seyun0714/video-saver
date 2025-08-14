@@ -1,13 +1,14 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:background_downloader/background_downloader.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; // <--- Import 추가
 import 'package:video_saver/ui/screens/browser_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // FileDownloader 초기 설정은 앱 시작 시 한 번만 수행
   await FileDownloader().configure();
-  runApp(const VideoSaverApp());
+  // ProviderScope로 앱의 최상단을 감싸줍니다.
+  runApp(const ProviderScope(child: VideoSaverApp()));
 }
 
 class VideoSaverApp extends StatelessWidget {
