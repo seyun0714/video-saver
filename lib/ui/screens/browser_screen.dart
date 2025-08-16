@@ -213,9 +213,10 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
               ctrl.addJavaScriptHandler(
                 handlerName: 'onVideoFound',
                 callback: (args) {
-                  // [중요] settingsProvider가 로드 완료되었을 때만 실행
-                  settingsServiceAsyncValue.whenData((settings) {
-                    _handleVideoFound(args, settings: settings);
+                  final settings = ref.read(settingsProvider);
+                  // settingsProvider가 데이터를 성공적으로 가져온 경우에만 로직을 실행합니다.
+                  settings.whenData((service) {
+                    _handleVideoFound(args, settings: service);
                   });
                 },
               );

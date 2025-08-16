@@ -38,20 +38,43 @@ class AsyncDownloads extends AsyncNotifier<List<DownloadRecord>> {
     );
   }
 
-  // 상태 업데이트 콜백
-  void _onStatusUpdate(TaskStatusUpdate update) {
-    // 현재 상태가 데이터일 때만 업데이트
-    if (state.hasValue) {
-      final records = state.value!;
-      final newRecords = [
-        for (final record in records)
-          if (record.task.taskId == update.task.taskId)
-            record..status = update.status
-          else
-            record,
-      ];
-      state = AsyncData(newRecords);
+  Future<void> _saveToGallery(Task task) async {
+    try {
+      // 파일을 공용 'Movies' 폴더로 이동합니다.
+      // 이 메소드는 자동으로 미디어 스캔을 트리거합니다.
+      final result = await FileDownloader().moveToSharedStorage(
+        task as DownloadTask,
+        SharedStorage.video,
+        directory: 'VideoSaver', // 'Movies' 폴더 아래에 'VideoSaver'라는 하위 폴더를 만듭니다.
+      );
+
+      if (result != null) {
+        print('[VideoSaver] 파일이 갤러리에 저장되었습니다: $result');
+      } else {
+        print('[VideoSaver] 갤러리 저장에 실패했습니다.');
+      }
+    } catch (e) {
+      print('[VideoSaver] 갤러리 저장 중 오류 발생: $e');
     }
+  }
+
+  void _onStatusUpdate(TaskStatusUpdate update) {
+    if (!state.hasValue) return;
+    final records = state.value!;
+    print('[VideoSaver] 상태 업데이트: ${update.task.taskId} -> ${update.status}');
+
+    if (update.status == TaskStatus.complete) {
+      // 👇 [수정] filePath 대신 update.task (DownloadTask 타입)를 전달합니다.
+      _saveToGallery(update.task as DownloadTask);
+    }
+
+    state = AsyncData([
+      for (final record in records)
+        if (record.task.taskId == update.task.taskId)
+          record..status = update.status
+        else
+          record,
+    ]);
   }
 
   // 진행률 업데이트 콜백
