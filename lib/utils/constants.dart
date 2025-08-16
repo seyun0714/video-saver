@@ -1,6 +1,5 @@
 // lib/utils/constants.dart
 
-// JS: 클릭 이벤트 및 다운로드 실행 문제를 모두 해결한 최종 버전
 const String videoObserverJS = r'''
 // --- 👇 [최종 수정] 전체 스크립트 로직 개선 ---
 // 기존 옵저버가 있다면 재사용하거나 새로 만듭니다.
@@ -18,10 +17,10 @@ function addDownloadButton(video) {
   if (!parent || parent.querySelector('.video-saver-btn')) {
     return;
   }
-  
   if (window.getComputedStyle(parent).position === 'static') {
     parent.style.position = 'relative';
-  }
+  }  
+
 
   const btn = document.createElement('div');
   btn.className = 'video-saver-btn';

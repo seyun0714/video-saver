@@ -1,4 +1,5 @@
-// lib/providers/downloads_provider.dart
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:video_saver/models/download_record.dart';
@@ -6,67 +7,114 @@ import 'package:video_saver/services/download_service.dart';
 
 final downloadServiceProvider = Provider((ref) => DownloadService());
 
-class DownloadsNotifier extends StateNotifier<List<DownloadRecord>> {
-  DownloadsNotifier(this.ref) : super([]) {
+// 👇 StateNotifierProvider -> AsyncNotifierProvider로 변경
+class AsyncDownloads extends AsyncNotifier<List<DownloadRecord>> {
+  // build 메소드에서 초기 데이터를 비동기적으로 로드합니다.
+  @override
+  Future<List<DownloadRecord>> build() async {
     _registerCallbacks();
+    return _loadExistingTasks(); // 초기 데이터 로드
   }
 
-  final Ref ref;
+  // 데이터베이스에서 모든 기록을 불러오는 로직
+  Future<List<DownloadRecord>> _loadExistingTasks() async {
+    final recordsFromDb = await FileDownloader().database.allRecords();
+    final records = <DownloadRecord>[];
+    for (var recordFromDb in recordsFromDb) {
+      records.add(
+        DownloadRecord(task: recordFromDb.task as DownloadTask)
+          ..status = recordFromDb.status
+          ..progress = recordFromDb.progress,
+      );
+    }
+    return records;
+  }
 
+  // 다운로더 콜백 등록
   void _registerCallbacks() {
-    ref
-        .read(downloadServiceProvider)
-        .registerCallbacks(
-          onStatusUpdate: (update) {
-            if (!mounted) return;
-            state = [
-              for (final record in state)
-                if (record.task.taskId == update.task.taskId)
-                  record..status = update.status
-                else
-                  record,
-            ];
-          },
-          onProgressUpdate: (update) {
-            if (!mounted) return;
-            state = [
-              for (final record in state)
-                if (record.task.taskId == update.task.taskId)
-                  record..progress = update.progress
-                else
-                  record,
-            ];
-          },
-          onDownloadComplete: (task, filePath) {
-            // 완료 시 로직
-          },
-        );
+    FileDownloader().registerCallbacks(
+      taskStatusCallback: _onStatusUpdate,
+      taskProgressCallback: _onProgressUpdate,
+    );
   }
 
+  // 상태 업데이트 콜백
+  void _onStatusUpdate(TaskStatusUpdate update) {
+    // 현재 상태가 데이터일 때만 업데이트
+    if (state.hasValue) {
+      final records = state.value!;
+      final newRecords = [
+        for (final record in records)
+          if (record.task.taskId == update.task.taskId)
+            record..status = update.status
+          else
+            record,
+      ];
+      state = AsyncData(newRecords);
+    }
+  }
+
+  // 진행률 업데이트 콜백
+  void _onProgressUpdate(TaskProgressUpdate update) {
+    if (state.hasValue) {
+      final records = state.value!;
+      final newRecords = [
+        for (final record in records)
+          if (record.task.taskId == update.task.taskId)
+            record..progress = update.progress
+          else
+            record,
+      ];
+      state = AsyncData(newRecords);
+    }
+  }
+
+  // 다운로드 추가
   Future<void> enqueueDownload(DownloadTask task) async {
+    if (state.value?.any((r) => r.task.taskId == task.taskId) ?? false) return;
+
     await ref.read(downloadServiceProvider).enqueue(task);
-    state = [...state, DownloadRecord(task: task)];
+    final newRecord = DownloadRecord(task: task);
+
+    state = AsyncData([...state.value!, newRecord]);
   }
 
-  // --- 👇 [3단계] Notifier에 관리 메소드 추가 ---
+  // 다운로드 일시정지
   Future<void> pauseDownload(DownloadRecord record) async {
     await ref.read(downloadServiceProvider).pause(record.task);
   }
 
+  // 다운로드 재개
   Future<void> resumeDownload(DownloadRecord record) async {
     await ref.read(downloadServiceProvider).resume(record.task);
   }
 
+  // 다운로드 취소
   Future<void> cancelDownload(DownloadRecord record) async {
     await ref.read(downloadServiceProvider).cancel(record.task);
-    // 상태 리스트에서 즉시 제거하여 UI에 반영
-    state = state.where((r) => r.task.taskId != record.task.taskId).toList();
   }
 
-  // --- 👆 [3단계] Notifier에 관리 메소드 추가 ---
+  // 다운로드 삭제
+  Future<void> deleteDownload(DownloadRecord record) async {
+    await FileDownloader().database.deleteRecordWithId(record.task.taskId);
+    try {
+      final filePath = '${record.task.directory}/${record.task.filename}';
+      final file = File(filePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    } catch (e) {
+      print('파일 삭제 중 오류 발생: $e');
+    }
+
+    final newRecords = state.value
+        ?.where((r) => r.task.taskId != record.task.taskId)
+        .toList();
+    state = AsyncData(newRecords ?? []);
+  }
 }
 
-final downloadsProvider =
-    StateNotifierProvider<DownloadsNotifier, List<DownloadRecord>>((ref) {
-      return DownloadsNotifier(ref);
+final asyncDownloadsProvider =
+    AsyncNotifierProvider<AsyncDownloads, List<DownloadRecord>>(() {
+      return AsyncDownloads();
     });

@@ -5,7 +5,6 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_saver/services/settings_service.dart';
 import 'package:video_saver/ui/widgets/browser_app_bar.dart';
-import 'package:video_saver/ui/widgets/downloads_bar.dart';
 import 'package:video_saver/ui/widgets/settings_sheet.dart';
 import 'package:video_saver/utils/constants.dart';
 import 'package:video_saver/providers/download_provider.dart';
@@ -32,7 +31,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   void initState() {
     super.initState();
     // initState에서는 ref.read를 사용하여 Provider의 초기 로직을 실행합니다.
-    final downloadsNotifier = ref.read(downloadsProvider.notifier);
+    final downloadsNotifier = ref.read(asyncDownloadsProvider.notifier);
     // Provider가 초기화될 때 콜백이 등록되므로, 여기서 별도로 호출할 필요는 없습니다.
   }
 
@@ -58,7 +57,16 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
       userAgent: userAgent,
     );
 
-    await ref.read(downloadsProvider.notifier).enqueueDownload(task);
+    await ref.read(asyncDownloadsProvider.notifier).enqueueDownload(task);
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('\'${task.filename}\' 다운로드를 시작합니다.'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
   void _handleVideoFound(
@@ -134,7 +142,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   @override
   Widget build(BuildContext context) {
     // build 메소드에서는 ref.watch를 사용하여 상태 변화를 감지하고 UI를 다시 빌드합니다.
-    final downloads = ref.watch(downloadsProvider);
+    final downloads = ref.watch(asyncDownloadsProvider);
     final settingsServiceAsyncValue = ref.watch(settingsProvider);
 
     return SafeArea(
@@ -175,21 +183,21 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                     action: PermissionResponseAction.GRANT,
                   );
                 },
-                onConsoleMessage: (controller, consoleMessage) {
-                  print("From WebView: ${consoleMessage.message}");
-                },
                 onWebViewCreated: (ctrl) {
                   _webCtrl = ctrl;
                   ctrl.addJavaScriptHandler(
                     handlerName: 'onVideoFound',
                     callback: (args) {
-                      // settingsProvider가 로드되었는지 확인 후 로직 실행
-                      settingsServiceAsyncValue.whenData((settings) {
-                        _handleVideoFound(args, settings: settings);
+                      // 👇 [수정] 콜백 함수가 호출될 때 provider의 최신 상태를 읽어옵니다.
+                      final settings = ref.read(settingsProvider);
+                      // settingsProvider가 데이터를 성공적으로 가져온 경우에만 로직을 실행합니다.
+                      settings.whenData((service) {
+                        _handleVideoFound(args, settings: service);
                       });
                     },
                   );
                 },
+                //...
                 onLoadStop: (ctrl, url) async {
                   // --- 👇 [3단계] 페이지 로드 완료 시 버튼 상태 업데이트 ---
                   final back = await ctrl.canGoBack();
@@ -212,25 +220,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                 initialUrlRequest: URLRequest(url: WebUri(_urlCtrl.text)),
               ),
             ),
-            DownloadsBar(records: downloads),
           ],
-        ),
-        floatingActionButton: settingsServiceAsyncValue.when(
-          data: (settings) => FloatingActionButton.extended(
-            label: const Text('테스트 다운로드'),
-            icon: const Icon(Icons.download),
-            onPressed: () {
-              const testUrl =
-                  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
-              _enqueueDownload(testUrl, settings: settings);
-            },
-          ),
-          // 설정 로딩 중에는 버튼 비활성화
-          loading: () => const FloatingActionButton(
-            onPressed: null,
-            child: CircularProgressIndicator(),
-          ),
-          error: (e, s) => const SizedBox.shrink(),
         ),
       ),
     );

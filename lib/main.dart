@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart'; // <--- Import 추가
-import 'package:video_saver/ui/screens/browser_screen.dart';
+import 'package:video_saver/ui/screens/main_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,7 +19,7 @@ class VideoSaverApp extends StatelessWidget {
     return MaterialApp(
       title: 'Video Saver',
       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const BrowserScreen(),
+      home: const MainScreen(), // 이렇게 수정합니다.
       debugShowCheckedModeBanner: false,
     );
   }
