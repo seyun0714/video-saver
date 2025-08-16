@@ -87,5 +87,7 @@ window.videoSaverObserver.observe(document.body, {
   childList: true,
   subtree: true
 });
-// --- 👆 [최종 수정] ---
+document.body.addEventListener('click', function() {
+  window.flutter_inappwebview.callHandler('onWebViewTapped');
+}, true);
 ''';

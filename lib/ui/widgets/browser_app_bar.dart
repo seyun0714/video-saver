@@ -6,13 +6,6 @@ class BrowserAppBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onGo;
   final VoidCallback onOpenSettings;
   final double progress;
-  // --- 👇 [3단계] 웹뷰 제어 콜백 추가 ---
-  final VoidCallback onBack;
-  final VoidCallback onForward;
-  final VoidCallback onReload;
-  final bool canGoBack;
-  final bool canGoForward;
-  // --- 👆 [3단계] 웹뷰 제어 콜백 추가 ---
 
   const BrowserAppBar({
     super.key,
@@ -20,13 +13,6 @@ class BrowserAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.onGo,
     required this.onOpenSettings,
     required this.progress,
-    // --- 👇 [3단계] 생성자 파라미터 추가 ---
-    required this.onBack,
-    required this.onForward,
-    required this.onReload,
-    required this.canGoBack,
-    required this.canGoForward,
-    // --- 👆 [3단계] 생성자 파라미터 추가 ---
   });
 
   @override
@@ -34,39 +20,45 @@ class BrowserAppBar extends StatelessWidget implements PreferredSizeWidget {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      // --- 👇 [3단계] 뒤로가기 버튼 추가 ---
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: canGoBack ? onBack : null, // 비활성화 상태 제어
-      ),
-      // --- 👆 [3단계] 뒤로가기 버튼 추가 ---
-      title: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: urlController,
-              decoration: const InputDecoration(hintText: 'Enter URL'),
-              onSubmitted: (_) => onGo(),
-            ),
+      // leading (뒤로가기 버튼) 제거
+      title: TextField(
+        // 👈 TextField를 Row 바깥으로 빼서 전체 너비 사용
+        controller: urlController,
+        decoration: InputDecoration(
+          hintText: 'URL 입력',
+          // 검색(이동) 버튼을 TextField 안에 아이콘으로 배치
+          suffixIcon: IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: onGo,
           ),
-          IconButton(onPressed: onGo, icon: const Icon(Icons.arrow_forward)),
-        ],
+          contentPadding: const EdgeInsets.symmetric(
+            vertical: 0,
+            horizontal: 16,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30.0),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(30.0),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+        ),
+        onSubmitted: (_) => onGo(),
       ),
       actions: [
-        // --- 👇 [3단계] 앞으로가기, 새로고침 버튼 추가 ---
+        // 설정 버튼만 남김
         IconButton(
-          icon: const Icon(Icons.arrow_forward),
-          onPressed: canGoForward ? onForward : null, // 비활성화 상태 제어
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: onOpenSettings,
         ),
-        IconButton(icon: const Icon(Icons.refresh), onPressed: onReload),
-        // --- 👆 [3단계] 앞으로가기, 새로고침 버튼 추가 ---
-        IconButton(icon: const Icon(Icons.settings), onPressed: onOpenSettings),
       ],
       bottom: progress < 1.0
           ? PreferredSize(
-              preferredSize: const Size.fromHeight(4.0),
+              preferredSize: const Size.fromHeight(3.0),
               child: LinearProgressIndicator(
                 value: progress == 0 ? null : progress,
+                minHeight: 3.0,
               ),
             )
           : null,
@@ -74,5 +66,6 @@ class BrowserAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 4.0);
+  Size get preferredSize =>
+      Size.fromHeight(kToolbarHeight + (progress < 1.0 ? 3.0 : 0.0));
 }

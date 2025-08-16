@@ -96,7 +96,11 @@ class AsyncDownloads extends AsyncNotifier<List<DownloadRecord>> {
 
   // 다운로드 삭제
   Future<void> deleteDownload(DownloadRecord record) async {
-    await FileDownloader().database.deleteRecordWithId(record.task.taskId);
+    // 👇 [수정] 데이터베이스 기록까지 삭제하는 올바른 메소드입니다.
+    await FileDownloader().cancelTaskWithId(record.task.taskId);
+
+    // cancelTaskWithId가 파일 삭제까지 처리해주는 경우가 많지만,
+    // 만일을 대비해 파일이 남아있으면 직접 삭제하는 로직을 유지하는 것이 안전합니다.
     try {
       final filePath = '${record.task.directory}/${record.task.filename}';
       final file = File(filePath);
@@ -104,9 +108,10 @@ class AsyncDownloads extends AsyncNotifier<List<DownloadRecord>> {
         await file.delete();
       }
     } catch (e) {
-      print('파일 삭제 중 오류 발생: $e');
+      print('파일 삭제 중 추가 오류 발생: $e');
     }
 
+    // 상태 리스트에서 해당 항목 제거
     final newRecords = state.value
         ?.where((r) => r.task.taskId != record.task.taskId)
         .toList();

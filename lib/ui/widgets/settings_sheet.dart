@@ -29,12 +29,6 @@ Future<void> showSettingsSheet({
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // --- 👇 [수정] 허용 도메인 UI 부분 전체 삭제 ---
-                  // const Text('허용 도메인...'),
-                  // const SizedBox(height: 8),
-                  // TextField(...),
-                  // const SizedBox(height: 12),
-                  // --- 👆 [수정] ---
                   SwitchListTile(
                     title: const Text('와이파이에서만 다운로드'),
                     value: wifiOnly,

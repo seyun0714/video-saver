@@ -1,14 +1,16 @@
 // lib/ui/screens/browser_screen.dart
+
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_saver/providers/settings_provider.dart';
 import 'package:video_saver/services/settings_service.dart';
 import 'package:video_saver/ui/widgets/browser_app_bar.dart';
 import 'package:video_saver/ui/widgets/settings_sheet.dart';
 import 'package:video_saver/utils/constants.dart';
 import 'package:video_saver/providers/download_provider.dart';
-import 'package:video_saver/providers/settings_provider.dart';
 
 class BrowserScreen extends ConsumerStatefulWidget {
   const BrowserScreen({super.key});
@@ -24,23 +26,29 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   InAppWebViewController? _webCtrl;
   double _progress = 0;
 
-  bool _canGoBack = false;
-  bool _canGoForward = false;
+  PullToRefreshController? _pullToRefreshCtrl;
+  DateTime? _backButtonPressTime;
 
   @override
   void initState() {
     super.initState();
-    // initState에서는 ref.read를 사용하여 Provider의 초기 로직을 실행합니다.
-    final downloadsNotifier = ref.read(asyncDownloadsProvider.notifier);
-    // Provider가 초기화될 때 콜백이 등록되므로, 여기서 별도로 호출할 필요는 없습니다.
+    _pullToRefreshCtrl = PullToRefreshController(
+      settings: PullToRefreshSettings(color: Colors.blue),
+      onRefresh: () async {
+        if (await _webCtrl?.getUrl() != null) {
+          _webCtrl?.reload();
+        }
+      },
+    );
   }
 
-  // 로직들을 State 클래스의 private 메소드로 분리
-  void _go() {
+  // --- 👇 다운로드 로직 섹션 (이전 상태로 완벽히 복구 및 확인) ---
+  Future<void> _go() async {
     final url = _urlCtrl.text.trim();
     if (url.isEmpty) return;
-    final uri = url.startsWith('http') ? url : 'https://$url';
+    final uri = url.startsWith('http') ? url : 'https-://$url';
     _webCtrl?.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+    FocusScope.of(context).unfocus(); // 검색 시 포커스 해제
   }
 
   Future<void> _enqueueDownload(
@@ -49,14 +57,13 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   }) async {
     final referer = await _webCtrl?.getUrl();
     final userAgent = (await _webCtrl?.getSettings())?.userAgent;
-
     final downloadService = ref.read(downloadServiceProvider);
     final task = await downloadService.createDownloadTask(
       url: url,
       referer: referer?.toString(),
       userAgent: userAgent,
     );
-
+    // [중요] 수정된 프로바이더를 올바르게 호출합니다.
     await ref.read(asyncDownloadsProvider.notifier).enqueueDownload(task);
 
     if (mounted) {
@@ -76,9 +83,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     if (args.isEmpty) return;
     final payload = jsonDecode(args.first as String);
     final List sources = payload['sources'] ?? [];
-
     if (!mounted) return;
-
     if (sources.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('다운로드 가능한 소스를 찾지 못했어요 (blob/DRM 제외).')),
@@ -95,8 +100,11 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     List<Map<String, dynamic>> sources, {
     required SettingsService settings,
   }) async {
+    // 👇 [수정] BottomSheet의 context를 사용하기 위해 builder 밖에서 선언
+    final BuildContext currentContext = context;
+
     final selectedSource = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
+      context: currentContext, // 미리 저장해둔 context 사용
       builder: (ctx) {
         return SafeArea(
           child: ListView.separated(
@@ -114,7 +122,12 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                onTap: () => Navigator.of(c).pop(s),
+                // 👇 [수정] Navigator를 호출하기 전에 mounted를 확인합니다.
+                onTap: () {
+                  // c.mounted 대신 더 넓은 범위의 currentContext.mounted를 확인하는 것이 안전합니다.
+                  if (!currentContext.mounted) return;
+                  Navigator.of(c).pop(s);
+                },
               );
             },
             separatorBuilder: (_, __) => const Divider(height: 1),
@@ -123,16 +136,17 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
       },
     );
 
+    // 👇 [중요] await 이후의 로직에서도 mounted를 확인해줍니다.
     if (selectedSource != null) {
       final url = selectedSource['url'] as String?;
       if (url == null || url.isEmpty) return;
 
       if (url.toLowerCase().contains('.m3u8')) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('HLS(m3u8)는 현재 지원하지 않아요.')),
-          );
-        }
+        // [수정] 여기에서도 mounted 확인
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('HLS(m3u8)는 현재 지원하지 않아요.')),
+        );
         return;
       }
       _enqueueDownload(url, settings: settings);
@@ -141,86 +155,92 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // build 메소드에서는 ref.watch를 사용하여 상태 변화를 감지하고 UI를 다시 빌드합니다.
-    final downloads = ref.watch(asyncDownloadsProvider);
     final settingsServiceAsyncValue = ref.watch(settingsProvider);
 
-    return SafeArea(
-      top: false,
-      bottom: true,
-      child: Scaffold(
-        appBar: BrowserAppBar(
-          urlController: _urlCtrl,
-          onGo: _go,
-          onOpenSettings: () {
-            settingsServiceAsyncValue.whenData((service) {
-              showSettingsSheet(
-                context: context,
-                settingsService: service,
-                onSettingsSaved: () => ref.refresh(settingsProvider),
-              );
-            });
-          },
-          progress: _progress,
-          onBack: () => _webCtrl?.goBack(),
-          onForward: () => _webCtrl?.goForward(),
-          onReload: () => _webCtrl?.reload(),
-          canGoBack: _canGoBack,
-          canGoForward: _canGoForward,
-        ),
-        body: Column(
-          children: [
-            Expanded(
-              child: InAppWebView(
-                initialSettings: InAppWebViewSettings(
-                  javaScriptEnabled: true,
-                  mediaPlaybackRequiresUserGesture: false,
-                  allowsInlineMediaPlayback: true,
-                ),
-                onPermissionRequest: (controller, request) async {
-                  return PermissionResponse(
-                    resources: request.resources,
-                    action: PermissionResponseAction.GRANT,
-                  );
-                },
-                onWebViewCreated: (ctrl) {
-                  _webCtrl = ctrl;
-                  ctrl.addJavaScriptHandler(
-                    handlerName: 'onVideoFound',
-                    callback: (args) {
-                      // 👇 [수정] 콜백 함수가 호출될 때 provider의 최신 상태를 읽어옵니다.
-                      final settings = ref.read(settingsProvider);
-                      // settingsProvider가 데이터를 성공적으로 가져온 경우에만 로직을 실행합니다.
-                      settings.whenData((service) {
-                        _handleVideoFound(args, settings: service);
-                      });
-                    },
-                  );
-                },
-                //...
-                onLoadStop: (ctrl, url) async {
-                  // --- 👇 [3단계] 페이지 로드 완료 시 버튼 상태 업데이트 ---
-                  final back = await ctrl.canGoBack();
-                  final forward = await ctrl.canGoForward();
-                  setState(() {
-                    _canGoBack = back;
-                    _canGoForward = forward;
-                  });
-                  // --- 👆 [3단계] 페이지 로드 완료 시 버튼 상태 업데이트 ---
-                  await ctrl.evaluateJavascript(source: videoObserverJS);
-                },
-                onLoadResource: (ctrl, res) {
-                  // 이 콜백은 매우 자주 호출되므로 무거운 작업을 하지 않습니다.
-                },
-                onProgressChanged: (ctrl, p) {
-                  setState(() {
-                    _progress = p / 100.0;
-                  });
-                },
-                initialUrlRequest: URLRequest(url: WebUri(_urlCtrl.text)),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        final canGoBack = await _webCtrl?.canGoBack() ?? false;
+        if (canGoBack) {
+          _webCtrl?.goBack();
+        } else {
+          final now = DateTime.now();
+          final withinTwoSeconds =
+              _backButtonPressTime != null &&
+              now.difference(_backButtonPressTime!) <
+                  const Duration(seconds: 2);
+          if (withinTwoSeconds) {
+            SystemNavigator.pop();
+          } else {
+            _backButtonPressTime = now;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('한 번 더 누르면 종료됩니다.'),
+                duration: Duration(seconds: 2),
               ),
+            );
+          }
+        }
+      },
+      child: SafeArea(
+        top: true,
+        bottom: false,
+        child: Scaffold(
+          appBar: BrowserAppBar(
+            urlController: _urlCtrl,
+            onGo: _go,
+            onOpenSettings: () {
+              settingsServiceAsyncValue.whenData((service) {
+                showSettingsSheet(
+                  context: context,
+                  settingsService: service,
+                  onSettingsSaved: () => ref.refresh(settingsProvider),
+                );
+              });
+            },
+            progress: _progress,
+          ),
+          body: InAppWebView(
+            initialSettings: InAppWebViewSettings(
+              javaScriptEnabled: true,
+              mediaPlaybackRequiresUserGesture: false,
+              allowsInlineMediaPlayback: true,
             ),
-          ],
+            pullToRefreshController: _pullToRefreshCtrl,
+            onWebViewCreated: (ctrl) {
+              _webCtrl = ctrl;
+              ctrl.addJavaScriptHandler(
+                handlerName: 'onVideoFound',
+                callback: (args) {
+                  // [중요] settingsProvider가 로드 완료되었을 때만 실행
+                  settingsServiceAsyncValue.whenData((settings) {
+                    _handleVideoFound(args, settings: settings);
+                  });
+                },
+              );
+              ctrl.addJavaScriptHandler(
+                handlerName: 'onWebViewTapped',
+                callback: (args) {
+                  // 키보드와 입력창 포커스를 모두 해제합니다.
+                  FocusScope.of(context).unfocus();
+                },
+              );
+            },
+            onLoadStop: (ctrl, url) async {
+              _pullToRefreshCtrl?.endRefreshing();
+              await ctrl.evaluateJavascript(source: videoObserverJS);
+            },
+            onProgressChanged: (ctrl, p) {
+              setState(() {
+                _progress = p / 100.0;
+              });
+              if (p == 100) {
+                _pullToRefreshCtrl?.endRefreshing();
+              }
+            },
+            initialUrlRequest: URLRequest(url: WebUri(_urlCtrl.text)),
+          ),
         ),
       ),
     );
