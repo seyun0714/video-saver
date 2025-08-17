@@ -1,14 +1,32 @@
 // lib/ui/widgets/download_list_item.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:video_saver/models/download_record.dart';
 import 'package:video_saver/providers/download_provider.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 class DownloadListItem extends ConsumerWidget {
   final DownloadRecord record;
 
   const DownloadListItem({super.key, required this.record});
+
+  Future<String?> _generateThumbnail(DownloadRecord record) async {
+    // 다운로드가 완료된 파일만 썸네일 생성
+    if (record.status != TaskStatus.complete) {
+      return null;
+    }
+    final filePath = '${record.task.directory}/${record.task.filename}';
+    // VideoThumbnail.thumbnailFile은 썸네일 이미지 파일의 경로를 반환합니다.
+    final thumbnailPath = await VideoThumbnail.thumbnailFile(
+      video: filePath,
+      imageFormat: ImageFormat.JPEG,
+      maxWidth: 128, // 썸네일 이미지의 최대 너비
+      quality: 25,
+    );
+    return thumbnailPath;
+  }
 
   // 파일 크기를 읽기 쉽게 변환하는 함수
   String _formatBytes(int bytes, int decimals) {
@@ -93,15 +111,31 @@ class DownloadListItem extends ConsumerWidget {
               padding: const EdgeInsets.all(12.0),
               child: Row(
                 children: [
-                  // 7.2. 썸네일 (임시 아이콘)
-                  Container(
+                  SizedBox(
                     width: 80,
                     height: 60,
-                    color: Colors.grey[300],
-                    child: const Icon(
-                      Icons.video_library,
-                      size: 40,
-                      color: Colors.grey,
+                    child: FutureBuilder<String?>(
+                      future: _generateThumbnail(record),
+                      builder: (context, snapshot) {
+                        // 썸네일이 성공적으로 생성되면 이미지 표시
+                        if (snapshot.connectionState == ConnectionState.done &&
+                            snapshot.hasData &&
+                            snapshot.data != null) {
+                          return Image.file(
+                            File(snapshot.data!),
+                            fit: BoxFit.cover,
+                          );
+                        }
+                        // 썸네일 생성 전이나 실패 시, 기본 아이콘 표시
+                        return Container(
+                          color: Colors.grey[300],
+                          child: const Icon(
+                            Icons.video_library,
+                            size: 40,
+                            color: Colors.grey,
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(width: 12),

@@ -64,7 +64,6 @@ class AsyncDownloads extends AsyncNotifier<List<DownloadRecord>> {
     print('[VideoSaver] 상태 업데이트: ${update.task.taskId} -> ${update.status}');
 
     if (update.status == TaskStatus.complete) {
-      // 👇 [수정] filePath 대신 update.task (DownloadTask 타입)를 전달합니다.
       _saveToGallery(update.task as DownloadTask);
     }
 

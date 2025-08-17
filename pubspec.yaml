@@ -15,6 +15,7 @@ dependencies:
     shared_preferences: ^2.5.3
     share_plus: ^11.1.0
     flutter_riverpod: ^2.5.1
+    video_thumbnail: ^0.5.3
 
 dev_dependencies:
     flutter_test:

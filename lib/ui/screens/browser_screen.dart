@@ -42,12 +42,32 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
     );
   }
 
-  // --- 👇 다운로드 로직 섹션 (이전 상태로 완벽히 복구 및 확인) ---
+  bool _isValidUrl(String url) {
+    // 간단한 URL 패턴 검사 (공백이 없고, '.'이 포함되며, http/https로 시작하거나 일반적인 도메인 형태)
+    final urlPattern =
+        r'(^https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$';
+    final urlRegex = RegExp(urlPattern, caseSensitive: false);
+    return urlRegex.hasMatch(url);
+  }
+
+  // --- 👇 다운로드 로직 섹션  ---
   Future<void> _go() async {
-    final url = _urlCtrl.text.trim();
+    String url = _urlCtrl.text.trim();
     if (url.isEmpty) return;
-    final uri = url.startsWith('http') ? url : 'https-://$url';
-    _webCtrl?.loadUrl(urlRequest: URLRequest(url: WebUri(uri)));
+
+    // URL 유효성 검사
+    if (_isValidUrl(url)) {
+      // http/https스가 없으면 붙여줌
+      if (!url.startsWith('http')) {
+        url = 'https://$url';
+      }
+    } else {
+      // 유효한 URL이 아니면 검색어로 처리
+      final searchQuery = Uri.encodeComponent(url);
+      url = 'https://www.google.com/search?q=$searchQuery';
+    }
+
+    _webCtrl?.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
     FocusScope.of(context).unfocus(); // 검색 시 포커스 해제
   }
 

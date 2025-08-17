@@ -35,8 +35,8 @@ class DownloadService {
       updates: Updates.statusAndProgress,
       allowPause: true,
       retries: 2,
-      displayName: 'Video',
-      metaData: 'mp4',
+      displayName: filename,
+      metaData: url,
       headers: headers,
     );
   }
