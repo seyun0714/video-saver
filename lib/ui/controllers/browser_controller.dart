@@ -25,7 +25,6 @@ class BrowserController extends ChangeNotifier {
   double _progress = 0;
   double get progress => _progress;
 
-  // UI에 BottomSheet을 표시해야 함을 알리는 상태
   List<Map<String, dynamic>>? _sourcesToShow;
   List<Map<String, dynamic>>? get sourcesToShow => _sourcesToShow;
 
@@ -57,7 +56,9 @@ class BrowserController extends ChangeNotifier {
           if (args.isEmpty) return;
           final payload = jsonDecode(args.first as String);
           if (payload is! Map) return;
-          if (payload['reason'] != 'btn') return;
+          // --- 👇 [수정] 아래 라인 삭제 ---
+          // if (payload['reason'] != 'btn') return;
+          // --- 👆 [수정] ---
           _handleVideoFoundPayload(payload);
         });
       },
@@ -145,20 +146,16 @@ class BrowserController extends ChangeNotifier {
     }
     _lastSourcesSig = sig;
 
-    // 상태를 업데이트하고 UI에 알림
     _sourcesToShow = sources
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
     notifyListeners();
   }
 
-  // UI가 BottomSheet을 띄운 후 호출하여 상태를 초기화
   void clearSourcesToShow() {
     _sourcesToShow = null;
-    // notifyListeners() 호출은 필요 없음 (UI가 다시 반응할 필요 X)
   }
 
-  // BottomSheet 열림/닫힘 상태를 UI로부터 전달받음
   void setQualitySheetOpen(bool isOpen) {
     _isQualitySheetOpen = isOpen;
   }

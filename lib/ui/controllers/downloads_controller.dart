@@ -16,6 +16,12 @@ class DownloadsController extends ChangeNotifier {
   bool isMultiSelectMode = false;
   Set<String> selectedTaskIds = {};
 
+  void startMultiSelectMode() {
+    if (isMultiSelectMode) return;
+    isMultiSelectMode = true;
+    notifyListeners();
+  }
+
   // 다중 선택 모드로 전환
   void enableMultiSelectMode(String initialTaskId) {
     if (isMultiSelectMode) return;

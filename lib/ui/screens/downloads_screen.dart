@@ -42,10 +42,7 @@ class DownloadsScreen extends ConsumerWidget {
             icon: const Icon(Icons.delete_outline),
             onPressed: totalItemCount == 0
                 ? null
-                : () {
-                    // 아이템이 있을 때만 삭제 모드 진입 가능
-                    // (실제 진입은 아이템을 길게 눌렀을 때 시작됨)
-                  },
+                : notifier.startMultiSelectMode,
           ),
         ],
       );
