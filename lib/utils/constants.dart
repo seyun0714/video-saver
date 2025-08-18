@@ -1,15 +1,12 @@
 // lib/utils/constants.dart
 
 const String videoObserverJS = r'''
-// --- 👇 [최종 수정] 전체 스크립트 로직 개선 ---
 // 기존 옵저버가 있다면 재사용하거나 새로 만듭니다.
 window.videoSaverObserver?.disconnect();
 
-// 디바운스 로직은 유지합니다.
-let debounceTimer;
 const debouncedRun = () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(findAllVideos, 500);
+  clearTimeout(window.debounceTimer);
+  window.debounceTimer = setTimeout(findAllVideos, 500);
 };
 
 function addDownloadButton(video) {

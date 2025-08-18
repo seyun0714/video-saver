@@ -10,21 +10,21 @@ import 'package:logging/logging.dart';
 final _log = Logger('DownloadListItem');
 
 class DownloadListItem extends ConsumerWidget {
-  // 1. 다중 선택 모드 관리를 위한 파라미터 추가
   final bool isMultiSelectMode;
   final bool isSelected;
   final VoidCallback onSelected;
+  final VoidCallback onLongPress; // onLongPress 콜백 추가
   final DownloadRecord record;
 
   const DownloadListItem({
     super.key,
     required this.record,
-    this.isMultiSelectMode = false, // 기본값 설정
+    this.isMultiSelectMode = false,
     this.isSelected = false,
     required this.onSelected,
+    required this.onLongPress, // 생성자에 추가
   });
 
-  // 파일 크기를 읽기 쉽게 변환하는 함수
   String _formatBytes(int bytes, int decimals) {
     if (bytes <= 0) return "0 B";
     const suffixes = ["B", "KB", "MB", "GB", "TB"];
@@ -32,7 +32,6 @@ class DownloadListItem extends ConsumerWidget {
     return '${(bytes / (1 << (i * 10))).toStringAsFixed(decimals)} ${suffixes[i]}';
   }
 
-  // 상태를 한글 텍스트로 변환하는 함수
   static String _statusLabel(TaskStatus s) {
     switch (s) {
       case TaskStatus.enqueued:
@@ -57,38 +56,38 @@ class DownloadListItem extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return FutureBuilder<int>(
-      future: record.task.expectedFileSize(), // Future<int>를 반환하는 함수를 호출
+      future: record.task.expectedFileSize(),
       builder: (context, snapshot) {
-        // Future가 완료되면 snapshot.data에 int 값이 담겨 옵니다.
-        final totalBytes = snapshot.data ?? -1; // 데이터가 아직 없으면 -1로 초기화
+        final totalBytes = snapshot.data ?? -1;
         final downloadedBytes = (totalBytes > 0)
             ? (record.progress * totalBytes).toInt()
             : 0;
 
         return GestureDetector(
-          onLongPress: () {
-            if (!isMultiSelectMode) {
-              onSelected(); // 길게 누르면 선택 모드로 진입하며 현재 항목 선택
-            }
-          },
+          onLongPress: onLongPress, // 길게 누르기 이벤트 연결
           onTap: () {
             if (isMultiSelectMode) {
-              onSelected(); // 선택 모드일 때는 선택/해제 콜백 호출
+              onSelected(); // 선택 모드일 때는 선택/해제
             } else {
               // 일반 모드일 때는 파일 열기
               if (record.status == TaskStatus.complete) {
-                final path_to_open = record.finalPath;
-                if (path_to_open != null && path_to_open.isNotEmpty) {
-                  OpenFilex.open(path_to_open);
+                final pathToOpen = record.finalPath;
+                if (pathToOpen != null && pathToOpen.isNotEmpty) {
+                  OpenFilex.open(pathToOpen);
+                } else {
+                  _log.warning('열 수 있는 파일 경로가 없습니다: ${record.task.taskId}');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('파일을 찾을 수 없습니다. 다시 다운로드해주세요.'),
+                    ),
+                  );
                 }
               }
             }
           },
           child: Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: isSelected
-                ? Colors.blue.withOpacity(0.2)
-                : null, // 선택된 항목 배경색 변경
+            color: isSelected ? Colors.blue.withOpacity(0.2) : null,
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
@@ -118,7 +117,6 @@ class DownloadListItem extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // 7.1. 비디오 제목
                         Text(
                           record.task.filename,
                           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -126,7 +124,6 @@ class DownloadListItem extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 8),
-                        // 7.3. 다운로드 용량 및 진행률
                         if (record.status == TaskStatus.running ||
                             record.status == TaskStatus.paused)
                           LinearProgressIndicator(value: record.progress),
@@ -135,13 +132,11 @@ class DownloadListItem extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              // 로딩 중일 때는 "계산 중..." 표시
                               totalBytes == -1
                                   ? '계산 중...'
                                   : '${_formatBytes(downloadedBytes, 1)} / ${_formatBytes(totalBytes, 1)}',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
-                            // 7.4. 상태 텍스트
                             Text(
                               _statusLabel(record.status),
                               style: Theme.of(context).textTheme.bodySmall

@@ -2,78 +2,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_saver/providers/download_provider.dart';
+import 'package:video_saver/ui/controllers/downloads_controller.dart';
 import 'package:video_saver/ui/widgets/download_list_item.dart';
 
-class DownloadsScreen extends ConsumerStatefulWidget {
+class DownloadsScreen extends ConsumerWidget {
   const DownloadsScreen({super.key});
 
-  @override
-  ConsumerState<DownloadsScreen> createState() => _DownloadsScreenState();
-}
+  // AppBar를 빌드하는 함수
+  AppBar _buildAppBar(BuildContext context, WidgetRef ref, int totalItemCount) {
+    // UI 상태는 컨트롤러로부터 가져옴
+    final controller = ref.watch(downloadsControllerProvider);
+    final notifier = ref.read(downloadsControllerProvider.notifier);
 
-class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
-  // 2. 다중 선택 모드와 선택된 항목들을 관리하기 위한 상태 변수
-  bool _isMultiSelectMode = false;
-  Set<String> _selectedTaskIds = {}; // 선택된 taskId들을 저장
-
-  // 3. AppBar를 동적으로 변경하는 함수
-  AppBar _buildAppBar(int totalItemCount) {
-    if (_isMultiSelectMode) {
-      // 다중 선택 모드일 때의 AppBar
+    if (controller.isMultiSelectMode) {
       return AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () {
-            // 선택 모드 종료
-            setState(() {
-              _isMultiSelectMode = false;
-              _selectedTaskIds.clear();
-            });
-          },
+          onPressed: notifier.disableMultiSelectMode, // 컨트롤러 메서드 호출
         ),
-        title: Text('${_selectedTaskIds.length}개 선택됨'),
+        title: Text('${controller.selectedTaskIds.length}개 선택됨'),
         actions: [
-          // 전체 선택 버튼
           IconButton(
             icon: const Icon(Icons.select_all),
-            onPressed: () {
-              setState(() {
-                final allTaskIds = ref
-                    .read(asyncDownloadsProvider)
-                    .value!
-                    .map((r) => r.task.taskId)
-                    .toSet();
-                if (_selectedTaskIds.length == allTaskIds.length) {
-                  _selectedTaskIds.clear(); // 모두 선택된 경우, 전체 선택 해제
-                } else {
-                  _selectedTaskIds = allTaskIds; // 전체 선택
-                }
-              });
-            },
+            onPressed: notifier.toggleSelectAll, // 컨트롤러 메서드 호출
           ),
-          // 선택 항목 삭제 버튼
           IconButton(
             icon: const Icon(Icons.delete),
-            onPressed: _selectedTaskIds.isEmpty
-                ? null // 선택된 항목이 없으면 비활성화
-                : () => _confirmDelete(),
+            onPressed: controller.selectedTaskIds.isEmpty
+                ? null
+                : () => _confirmDelete(context, ref), // 삭제 확인 함수 호출
           ),
         ],
       );
     } else {
-      // 일반 모드일 때의 AppBar
       return AppBar(
         title: const Text('다운로드 목록'),
         actions: [
-          // 삭제 모드로 진입하는 버튼
           IconButton(
             icon: const Icon(Icons.delete_outline),
             onPressed: totalItemCount == 0
                 ? null
                 : () {
-                    setState(() {
-                      _isMultiSelectMode = true;
-                    });
+                    // 아이템이 있을 때만 삭제 모드 진입 가능
+                    // (실제 진입은 아이템을 길게 눌렀을 때 시작됨)
                   },
           ),
         ],
@@ -81,15 +52,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     }
   }
 
-  // 4. 삭제 확인 대화상자를 띄우는 함수
-  Future<void> _confirmDelete() async {
-    if (_selectedTaskIds.isEmpty) return;
+  // 삭제 확인 대화상자를 띄우는 함수
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final controller = ref.read(downloadsControllerProvider);
+    if (controller.selectedTaskIds.isEmpty) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('삭제 확인'),
         content: Text(
-          '선택한 ${_selectedTaskIds.length}개의 항목을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+          '선택한 ${controller.selectedTaskIds.length}개의 항목을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
         ),
         actions: [
           TextButton(
@@ -105,27 +78,28 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     );
 
     if (confirmed == true) {
-      final ids = Set<String>.from(_selectedTaskIds);
-      await ref.read(asyncDownloadsProvider.notifier).deleteDownloads(ids);
-      if (!mounted) return;
-      setState(() {
-        _isMultiSelectMode = false;
-        _selectedTaskIds.clear();
-      });
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('삭제 완료 (${ids.length}개)')));
+      final count = controller.selectedTaskIds.length;
+      // 실제 삭제 로직은 컨트롤러에 위임
+      await ref.read(downloadsControllerProvider.notifier).deleteSelected();
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('삭제 완료 ($count개)')));
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final downloadsAsyncValue = ref.watch(asyncDownloadsProvider);
+    // UI 상태와 로직을 담당하는 컨트롤러
+    final controller = ref.watch(downloadsControllerProvider);
+    final notifier = ref.read(downloadsControllerProvider.notifier);
 
     return downloadsAsyncValue.when(
       data: (downloads) {
         return Scaffold(
-          appBar: _buildAppBar(downloads.length), // 동적 AppBar 사용
+          appBar: _buildAppBar(context, ref, downloads.length),
           body: downloads.isEmpty
               ? const Center(child: Text('다운로드 기록이 없습니다.'))
               : ListView.builder(
@@ -134,18 +108,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                     final record = downloads[index];
                     return DownloadListItem(
                       record: record,
-                      isMultiSelectMode: _isMultiSelectMode,
-                      isSelected: _selectedTaskIds.contains(record.task.taskId),
-                      onSelected: () {
-                        setState(() {
-                          if (!_isMultiSelectMode) _isMultiSelectMode = true;
-                          if (_selectedTaskIds.contains(record.task.taskId)) {
-                            _selectedTaskIds.remove(record.task.taskId);
-                          } else {
-                            _selectedTaskIds.add(record.task.taskId);
-                          }
-                        });
-                      },
+                      isMultiSelectMode: controller.isMultiSelectMode,
+                      isSelected: controller.selectedTaskIds.contains(
+                        record.task.taskId,
+                      ),
+                      onSelected: () =>
+                          notifier.toggleSelection(record.task.taskId),
+                      onLongPress: () =>
+                          notifier.enableMultiSelectMode(record.task.taskId),
                     );
                   },
                 ),
