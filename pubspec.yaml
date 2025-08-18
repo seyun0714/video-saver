@@ -16,6 +16,8 @@ dependencies:
     share_plus: ^11.1.0
     flutter_riverpod: ^2.5.1
     video_thumbnail: ^0.5.3
+    open_filex: ^4.4.0
+    logging: ^1.2.0
 
 dev_dependencies:
     flutter_test:

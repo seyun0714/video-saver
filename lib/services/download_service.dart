@@ -65,7 +65,6 @@ class DownloadService {
   Future<void> shareFile(String filePath, String text) async {
     final shareText = '$text\n\n파일 위치: $filePath';
 
-    // SharePlus.instance.share를 사용하여 텍스트를 공유합니다.
     await SharePlus.instance.share(ShareParams(text: shareText));
   }
 

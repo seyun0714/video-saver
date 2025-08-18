@@ -3,14 +3,28 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:video_saver/models/download_record.dart';
 import 'package:video_saver/providers/download_provider.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:logging/logging.dart';
+
+final _log = Logger('DownloadListItem');
 
 class DownloadListItem extends ConsumerWidget {
+  // 1. 다중 선택 모드 관리를 위한 파라미터 추가
+  final bool isMultiSelectMode;
+  final bool isSelected;
+  final VoidCallback onSelected;
   final DownloadRecord record;
 
-  const DownloadListItem({super.key, required this.record});
+  const DownloadListItem({
+    super.key,
+    required this.record,
+    this.isMultiSelectMode = false, // 기본값 설정
+    this.isSelected = false,
+    required this.onSelected,
+  });
 
   Future<String?> _generateThumbnail(DownloadRecord record) async {
     // 다운로드가 완료된 파일만 썸네일 생성
@@ -58,42 +72,8 @@ class DownloadListItem extends ConsumerWidget {
     }
   }
 
-  void _showPopupMenu(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(asyncDownloadsProvider.notifier);
-    final items = <PopupMenuEntry>[];
-
-    // 다운로드가 진행중이거나 일시정지 상태일 때만 '취소' 메뉴 표시
-    if (record.status == TaskStatus.running ||
-        record.status == TaskStatus.paused) {
-      items.add(const PopupMenuItem(value: 'cancel', child: Text('취소')));
-    }
-
-    items.add(
-      const PopupMenuItem(
-        value: 'delete',
-        child: Text('삭제', style: TextStyle(color: Colors.red)),
-      ),
-    );
-
-    showMenu(
-      context: context,
-      position: const RelativeRect.fromLTRB(100, 100, 100, 100), // 위치는 임시
-      items: items,
-    ).then((selectedValue) {
-      if (selectedValue == 'cancel') {
-        notifier.cancelDownload(record);
-      } else if (selectedValue == 'delete') {
-        notifier.deleteDownload(record);
-      }
-    });
-  }
-
-  // lib/ui/widgets/download_list_item.dart
-  // ... (다른 코드는 그대로 둡니다)
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 👇 [수정] FutureBuilder를 사용해서 비동기적으로 파일 크기를 가져옵니다.
     return FutureBuilder<int>(
       future: record.task.expectedFileSize(), // Future<int>를 반환하는 함수를 호출
       builder: (context, snapshot) {
@@ -104,9 +84,29 @@ class DownloadListItem extends ConsumerWidget {
             : 0;
 
         return GestureDetector(
-          onLongPress: () => _showPopupMenu(context, ref),
+          onLongPress: () {
+            if (!isMultiSelectMode) {
+              onSelected(); // 길게 누르면 선택 모드로 진입하며 현재 항목 선택
+            }
+          },
+          onTap: () {
+            if (isMultiSelectMode) {
+              onSelected(); // 선택 모드일 때는 선택/해제 콜백 호출
+            } else {
+              // 일반 모드일 때는 파일 열기
+              if (record.status == TaskStatus.complete) {
+                final path_to_open = record.finalPath;
+                if (path_to_open != null && path_to_open.isNotEmpty) {
+                  OpenFilex.open(path_to_open);
+                }
+              }
+            }
+          },
           child: Card(
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: isSelected
+                ? Colors.blue.withOpacity(0.2)
+                : null, // 선택된 항목 배경색 변경
             child: Padding(
               padding: const EdgeInsets.all(12.0),
               child: Row(
@@ -181,6 +181,11 @@ class DownloadListItem extends ConsumerWidget {
                       ],
                     ),
                   ),
+                  if (isMultiSelectMode)
+                    Checkbox(
+                      value: isSelected,
+                      onChanged: (value) => onSelected(),
+                    ),
                 ],
               ),
             ),
