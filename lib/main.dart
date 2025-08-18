@@ -56,6 +56,7 @@ void main() async {
     // tapOpensFile: true로 설정하면, '완료' 알림을 탭했을 때
     // 다운로드된 파일을 OS의 기본 앱으로 열려고 시도합니다.
     tapOpensFile: true,
+    progressBar: true,
   );
 
   await FileDownloader().trackTasks();
