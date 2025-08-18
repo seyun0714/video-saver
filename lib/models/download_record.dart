@@ -7,4 +7,5 @@ class DownloadRecord {
   TaskStatus status = TaskStatus.enqueued;
   double progress = 0.0; // 0~1
   String? finalPath;
+  String? thumbPath;
 }

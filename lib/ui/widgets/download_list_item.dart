@@ -5,8 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:video_saver/models/download_record.dart';
-import 'package:video_saver/providers/download_provider.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:logging/logging.dart';
 
 final _log = Logger('DownloadListItem');
@@ -25,22 +23,6 @@ class DownloadListItem extends ConsumerWidget {
     this.isSelected = false,
     required this.onSelected,
   });
-
-  Future<String?> _generateThumbnail(DownloadRecord record) async {
-    // 다운로드가 완료된 파일만 썸네일 생성
-    if (record.status != TaskStatus.complete) {
-      return null;
-    }
-    final filePath = '${record.task.directory}/${record.task.filename}';
-    // VideoThumbnail.thumbnailFile은 썸네일 이미지 파일의 경로를 반환합니다.
-    final thumbnailPath = await VideoThumbnail.thumbnailFile(
-      video: filePath,
-      imageFormat: ImageFormat.JPEG,
-      maxWidth: 128, // 썸네일 이미지의 최대 너비
-      quality: 25,
-    );
-    return thumbnailPath;
-  }
 
   // 파일 크기를 읽기 쉽게 변환하는 함수
   String _formatBytes(int bytes, int decimals) {
@@ -114,19 +96,12 @@ class DownloadListItem extends ConsumerWidget {
                   SizedBox(
                     width: 80,
                     height: 60,
-                    child: FutureBuilder<String?>(
-                      future: _generateThumbnail(record),
-                      builder: (context, snapshot) {
-                        // 썸네일이 성공적으로 생성되면 이미지 표시
-                        if (snapshot.connectionState == ConnectionState.done &&
-                            snapshot.hasData &&
-                            snapshot.data != null) {
-                          return Image.file(
-                            File(snapshot.data!),
-                            fit: BoxFit.cover,
-                          );
+                    child: Builder(
+                      builder: (_) {
+                        final tp = record.thumbPath;
+                        if (tp != null && File(tp).existsSync()) {
+                          return Image.file(File(tp), fit: BoxFit.cover);
                         }
-                        // 썸네일 생성 전이나 실패 시, 기본 아이콘 표시
                         return Container(
                           color: Colors.grey[300],
                           child: const Icon(

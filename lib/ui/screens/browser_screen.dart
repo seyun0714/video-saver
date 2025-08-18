@@ -29,6 +29,9 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
   PullToRefreshController? _pullToRefreshCtrl;
   DateTime? _backButtonPressTime;
 
+  bool _isQualitySheetOpen = false;
+  String? _lastSourcesSig; // 같은 소스 반복 방지용(선택)
+
   @override
   void initState() {
     super.initState();
@@ -94,15 +97,18 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
         ),
       );
     }
+    await _webCtrl?.evaluateJavascript(
+      source:
+          "try{document.querySelectorAll('.video-saver-btn').forEach(b=>b.dataset.vsBusy='0')}catch(e){}",
+    );
   }
 
-  void _handleVideoFound(
-    List<dynamic> args, {
+  void _handleVideoFoundPayload(
+    Map payload, {
     required SettingsService settings,
   }) {
-    if (args.isEmpty) return;
-    final payload = jsonDecode(args.first as String);
-    final List sources = payload['sources'] ?? [];
+    if (_isQualitySheetOpen) return; // ★ 이미 시트가 떠 있으면 무시
+    final List sources = (payload['sources'] as List?) ?? const [];
     if (!mounted) return;
     if (sources.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,10 +116,22 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
       );
       return;
     }
+
+    // (선택) 같은 소스 반복 방지 — sources의 URL만으로 시그니처 생성
+    final sig = sources.map((e) => (e as Map)['url'] ?? '').join('|');
+    if (_lastSourcesSig == sig) {
+      // 직전과 동일 페이로드면 무시(필요 시 주석 처리)
+      // return;
+    }
+    _lastSourcesSig = sig;
+
+    _isQualitySheetOpen = true;
     _showQualitySheet(
-      sources.map((e) => Map<String, dynamic>.from(e)).toList(),
+      sources.map((e) => Map<String, dynamic>.from(e as Map)).toList(),
       settings: settings,
-    );
+    ).whenComplete(() {
+      _isQualitySheetOpen = false; // ★ 닫힐 때 플래그 해제
+    });
   }
 
   Future<void> _showQualitySheet(
@@ -236,7 +254,12 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                   final settings = ref.read(settingsProvider);
                   // settingsProvider가 데이터를 성공적으로 가져온 경우에만 로직을 실행합니다.
                   settings.whenData((service) {
-                    _handleVideoFound(args, settings: service);
+                    if (args.isEmpty) return;
+                    final payload = jsonDecode(args.first as String);
+                    if (payload is! Map) return;
+                    // ★ 버튼을 눌러 발생한 이벤트만 허용
+                    if (payload['reason'] != 'btn') return;
+                    _handleVideoFoundPayload(payload, settings: service);
                   });
                 },
               );
