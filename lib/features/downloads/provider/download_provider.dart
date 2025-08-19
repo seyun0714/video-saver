@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_saver/models/download_record.dart';
-import 'package:video_saver/services/download_service.dart';
+import 'package:video_saver/core/models/download_record.dart';
+import 'package:video_saver/core/services/download_service.dart';
 
 final downloadServiceProvider = Provider((ref) => DownloadService());
 

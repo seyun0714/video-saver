@@ -1,34 +1,34 @@
-// lib/ui/screens/downloads_screen.dart
+// lib/features/downloads/view/downloads_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_saver/providers/download_provider.dart';
-import 'package:video_saver/ui/controllers/downloads_controller.dart';
-import 'package:video_saver/ui/widgets/download_list_item.dart';
+// 경로 수정
+import 'package:video_saver/features/downloads/provider/download_provider.dart';
+import 'package:video_saver/features/downloads/view/widgets/download_list_item.dart';
+import 'package:video_saver/features/downloads/viewmodel/downloads_viewmodel.dart';
 
 class DownloadsScreen extends ConsumerWidget {
   const DownloadsScreen({super.key});
 
   // AppBar를 빌드하는 함수
   AppBar _buildAppBar(BuildContext context, WidgetRef ref, int totalItemCount) {
-    // UI 상태는 컨트롤러로부터 가져옴
-    final controller = ref.watch(downloadsControllerProvider);
-    final notifier = ref.read(downloadsControllerProvider.notifier);
+    // ViewModel을 사용하여 UI 상태를 가져오고 메서드를 호출합니다.
+    final viewModel = ref.watch(downloadsViewModelProvider);
 
-    if (controller.isMultiSelectMode) {
+    if (viewModel.isMultiSelectMode) {
       return AppBar(
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: notifier.disableMultiSelectMode, // 컨트롤러 메서드 호출
+          onPressed: viewModel.disableMultiSelectMode, // 뷰모델 메서드 호출
         ),
-        title: Text('${controller.selectedTaskIds.length}개 선택됨'),
+        title: Text('${viewModel.selectedTaskIds.length}개 선택됨'),
         actions: [
           IconButton(
             icon: const Icon(Icons.select_all),
-            onPressed: notifier.toggleSelectAll, // 컨트롤러 메서드 호출
+            onPressed: viewModel.toggleSelectAll, // 뷰모델 메서드 호출
           ),
           IconButton(
             icon: const Icon(Icons.delete),
-            onPressed: controller.selectedTaskIds.isEmpty
+            onPressed: viewModel.selectedTaskIds.isEmpty
                 ? null
                 : () => _confirmDelete(context, ref), // 삭제 확인 함수 호출
           ),
@@ -42,7 +42,7 @@ class DownloadsScreen extends ConsumerWidget {
             icon: const Icon(Icons.delete_outline),
             onPressed: totalItemCount == 0
                 ? null
-                : notifier.startMultiSelectMode,
+                : viewModel.startMultiSelectMode,
           ),
         ],
       );
@@ -51,15 +51,15 @@ class DownloadsScreen extends ConsumerWidget {
 
   // 삭제 확인 대화상자를 띄우는 함수
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final controller = ref.read(downloadsControllerProvider);
-    if (controller.selectedTaskIds.isEmpty) return;
+    final viewModel = ref.read(downloadsViewModelProvider);
+    if (viewModel.selectedTaskIds.isEmpty) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('삭제 확인'),
         content: Text(
-          '선택한 ${controller.selectedTaskIds.length}개의 항목을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
+          '선택한 ${viewModel.selectedTaskIds.length}개의 항목을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.',
         ),
         actions: [
           TextButton(
@@ -75,9 +75,9 @@ class DownloadsScreen extends ConsumerWidget {
     );
 
     if (confirmed == true) {
-      final count = controller.selectedTaskIds.length;
-      // 실제 삭제 로직은 컨트롤러에 위임
-      await ref.read(downloadsControllerProvider.notifier).deleteSelected();
+      final count = viewModel.selectedTaskIds.length;
+      // 실제 삭제 로직은 뷰모델에 위임
+      await viewModel.deleteSelected();
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
@@ -89,9 +89,8 @@ class DownloadsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final downloadsAsyncValue = ref.watch(asyncDownloadsProvider);
-    // UI 상태와 로직을 담당하는 컨트롤러
-    final controller = ref.watch(downloadsControllerProvider);
-    final notifier = ref.read(downloadsControllerProvider.notifier);
+    // UI 상태와 로직을 담당하는 뷰모델
+    final viewModel = ref.watch(downloadsViewModelProvider);
 
     return downloadsAsyncValue.when(
       data: (downloads) {
@@ -105,14 +104,14 @@ class DownloadsScreen extends ConsumerWidget {
                     final record = downloads[index];
                     return DownloadListItem(
                       record: record,
-                      isMultiSelectMode: controller.isMultiSelectMode,
-                      isSelected: controller.selectedTaskIds.contains(
+                      isMultiSelectMode: viewModel.isMultiSelectMode,
+                      isSelected: viewModel.selectedTaskIds.contains(
                         record.task.taskId,
                       ),
                       onSelected: () =>
-                          notifier.toggleSelection(record.task.taskId),
+                          viewModel.toggleSelection(record.task.taskId),
                       onLongPress: () =>
-                          notifier.enableMultiSelectMode(record.task.taskId),
+                          viewModel.enableMultiSelectMode(record.task.taskId),
                     );
                   },
                 ),

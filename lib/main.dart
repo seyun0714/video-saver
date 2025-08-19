@@ -1,9 +1,9 @@
-// lib/main.dart
+// lib/main.dart (수정 필요 없음)
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:video_saver/ui/screens/main_screen.dart';
+import 'package:video_saver/features/shell/view/main_screen.dart';
 import 'package:video_saver/utils/permissions.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:logging/logging.dart';

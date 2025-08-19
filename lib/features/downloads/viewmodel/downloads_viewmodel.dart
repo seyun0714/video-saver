@@ -1,17 +1,17 @@
 // lib/ui/controllers/downloads_controller.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_saver/providers/download_provider.dart';
+import 'package:video_saver/features/downloads/provider/download_provider.dart';
 
 // 1. 컨트롤러를 위한 Provider 생성
-final downloadsControllerProvider = ChangeNotifierProvider.autoDispose(
-  (ref) => DownloadsController(ref),
+final downloadsViewModelProvider = ChangeNotifierProvider.autoDispose(
+  (ref) => DownloadsViewModel(ref),
 );
 
 // 2. UI의 상태와 로직을 담당하는 컨트롤러
-class DownloadsController extends ChangeNotifier {
+class DownloadsViewModel extends ChangeNotifier {
   final Ref _ref;
-  DownloadsController(this._ref);
+  DownloadsViewModel(this._ref);
 
   bool isMultiSelectMode = false;
   Set<String> selectedTaskIds = {};

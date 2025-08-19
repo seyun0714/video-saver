@@ -1,7 +1,8 @@
-// lib/ui/screens/main_screen.dart
+// lib/features/shell/view/main_screen.dart
 import 'package:flutter/material.dart';
-import 'package:video_saver/ui/screens/browser_screen.dart';
-import 'package:video_saver/ui/screens/downloads_screen.dart';
+// 경로 수정
+import 'package:video_saver/features/browser/view/browser_screen.dart';
+import 'package:video_saver/features/downloads/view/downloads_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});

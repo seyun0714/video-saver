@@ -1,13 +1,14 @@
-// lib/ui/screens/browser_screen.dart
+// lib/features/browser/view/browser_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_saver/providers/settings_provider.dart';
-import 'package:video_saver/services/settings_service.dart';
-import 'package:video_saver/ui/controllers/browser_controller.dart';
-import 'package:video_saver/ui/widgets/browser_app_bar.dart';
-import 'package:video_saver/ui/widgets/settings_sheet.dart';
+import 'package:video_saver/core/services/webview_service.dart';
+import 'package:video_saver/features/browser/services/video_finder_service.dart';
+import 'package:video_saver/features/browser/viewmodel/browser_viewmodel.dart';
+import 'package:video_saver/features/browser/view/widgets/browser_app_bar.dart';
+import 'package:video_saver/features/settings/provider/settings_provider.dart';
+import 'package:video_saver/features/settings/view/widgets/settings_sheet.dart';
 
 class BrowserScreen extends ConsumerStatefulWidget {
   const BrowserScreen({super.key});
@@ -17,21 +18,17 @@ class BrowserScreen extends ConsumerStatefulWidget {
 }
 
 class _BrowserScreenState extends ConsumerState<BrowserScreen> {
-  late final BrowserController _controller;
   DateTime? _backButtonPressTime;
 
   @override
   void initState() {
     super.initState();
-    _controller = ref.read(browserControllerProvider);
-    _controller.initPullToRefresh();
   }
 
-  Future<void> _showQualitySheet(
-    List<Map<String, dynamic>> sources, {
-    required SettingsService settings,
-  }) async {
-    _controller.setQualitySheetOpen(true);
+  Future<void> _showQualitySheet(List<Map<String, dynamic>> sources) async {
+    final viewModel = ref.read(browserViewModelProvider);
+    viewModel.setQualitySheetOpen(true);
+
     final selectedSource =
         await showModalBottomSheet<Map<String, dynamic>>(
           context: context,
@@ -60,7 +57,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
             );
           },
         ).whenComplete(() {
-          _controller.setQualitySheetOpen(false);
+          viewModel.setQualitySheetOpen(false);
         });
 
     if (selectedSource != null && context.mounted) {
@@ -73,47 +70,37 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
         );
         return;
       }
-      _controller.enqueueDownload(
-        context: context,
-        url: url,
-        settings: settings,
-      );
+      viewModel.enqueueDownload(context, url);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final controller = ref.watch(browserControllerProvider);
+    final viewModel = ref.watch(browserViewModelProvider);
     final settingsServiceAsyncValue = ref.watch(settingsProvider);
 
-    // 컨트롤러의 상태 변화를 감지하여 UI 로직(BottomSheet)을 실행
-    ref.listen(browserControllerProvider, (previous, next) {
+    ref.listen(browserViewModelProvider, (previous, next) {
       if (next.sourcesToShow != null) {
-        final settings = ref.read(settingsProvider).value;
-        if (settings != null) {
-          _showQualitySheet(next.sourcesToShow!, settings: settings);
-        }
-        // 상태를 처리했으므로 컨트롤러의 상태를 초기화
+        _showQualitySheet(next.sourcesToShow!);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          ref.read(browserControllerProvider.notifier).clearSourcesToShow();
+          next.clearSourcesToShow();
         });
       }
     });
 
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+      onPopInvoked: (didPop) async {
         if (didPop) return;
-        final canGoBack = await controller.webCtrl?.canGoBack() ?? false;
+        final canGoBack =
+            await viewModel.webViewController?.canGoBack() ?? false;
         if (canGoBack) {
-          controller.webCtrl?.goBack();
+          viewModel.webViewController?.goBack();
         } else {
           final now = DateTime.now();
-          final withinTwoSeconds =
-              _backButtonPressTime != null &&
+          if (_backButtonPressTime != null &&
               now.difference(_backButtonPressTime!) <
-                  const Duration(seconds: 2);
-          if (withinTwoSeconds) {
+                  const Duration(seconds: 2)) {
             SystemNavigator.pop();
           } else {
             _backButtonPressTime = now;
@@ -131,8 +118,8 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
         bottom: false,
         child: Scaffold(
           appBar: BrowserAppBar(
-            urlController: controller.urlCtrl,
-            onGo: () => controller.go(context),
+            urlController: viewModel.urlController,
+            onGo: () => viewModel.go(context),
             onOpenSettings: () {
               settingsServiceAsyncValue.whenData((service) {
                 showSettingsSheet(
@@ -142,7 +129,7 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
                 );
               });
             },
-            progress: controller.progress,
+            progress: viewModel.progress,
           ),
           body: InAppWebView(
             initialSettings: InAppWebViewSettings(
@@ -150,11 +137,28 @@ class _BrowserScreenState extends ConsumerState<BrowserScreen> {
               mediaPlaybackRequiresUserGesture: false,
               allowsInlineMediaPlayback: true,
             ),
-            pullToRefreshController: controller.pullToRefreshCtrl,
-            onWebViewCreated: controller.onWebViewCreated,
-            onLoadStop: controller.onLoadStop,
-            onProgressChanged: controller.onProgressChanged,
-            initialUrlRequest: URLRequest(url: WebUri(controller.urlCtrl.text)),
+            pullToRefreshController: viewModel.pullToRefreshController,
+            onWebViewCreated: (controller) {
+              // 1. WebViewService의 메서드를 호출하여 controller를 전달합니다.
+              ref.read(webViewServiceProvider).onWebViewCreated(controller);
+
+              // 2. videoFinderServiceProvider를 import하고 핸들러를 등록합니다.
+              final videoFinder = ref.read(videoFinderServiceProvider);
+              controller.addJavaScriptHandler(
+                handlerName: 'onVideoFound',
+                callback: videoFinder.onVideoFoundCallback,
+              );
+            },
+            // 3. WebViewService의 메서드를 호출합니다.
+            onLoadStop: (controller, url) =>
+                ref.read(webViewServiceProvider).onLoadStop(controller, url),
+            // 4. WebViewService의 메서드를 호출합니다.
+            onProgressChanged: (controller, progress) => ref
+                .read(webViewServiceProvider)
+                .onProgress(controller, progress),
+            initialUrlRequest: URLRequest(
+              url: WebUri(viewModel.urlController.text),
+            ),
           ),
         ),
       ),

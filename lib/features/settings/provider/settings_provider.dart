@@ -1,6 +1,6 @@
 // lib/providers/settings_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_saver/services/settings_service.dart';
+import 'package:video_saver/core/services/settings_service.dart';
 
 final settingsServiceProvider = Provider((ref) => SettingsService());
 

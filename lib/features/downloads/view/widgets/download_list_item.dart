@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:background_downloader/background_downloader.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:video_saver/models/download_record.dart';
+import 'package:video_saver/core/models/download_record.dart';
 import 'package:logging/logging.dart';
 
 final _log = Logger('DownloadListItem');

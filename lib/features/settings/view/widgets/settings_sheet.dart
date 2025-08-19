@@ -1,6 +1,6 @@
 // lib/ui/widgets/settings_sheet.dart
 import 'package:flutter/material.dart';
-import 'package:video_saver/services/settings_service.dart';
+import 'package:video_saver/core/services/settings_service.dart';
 
 Future<void> showSettingsSheet({
   required BuildContext context,
