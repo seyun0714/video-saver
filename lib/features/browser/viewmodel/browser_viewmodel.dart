@@ -14,7 +14,7 @@ final browserViewModelProvider = ChangeNotifierProvider.autoDispose(
 class BrowserViewModel extends ChangeNotifier {
   final Ref _ref;
   final TextEditingController urlController = TextEditingController(
-    text: 'https://www.pexels.com/videos/',
+    text: 'https://www.instagram.com',
   );
   late final WebViewService _webViewService;
   late final VideoFinderService _videoFinderService;
@@ -24,6 +24,10 @@ class BrowserViewModel extends ChangeNotifier {
 
   List<Map<String, dynamic>>? _sourcesToShow;
   List<Map<String, dynamic>>? get sourcesToShow => _sourcesToShow;
+
+  // 영상 길이를 저장할 상태 변수 추가
+  double? _durationToShow;
+  double? get durationToShow => _durationToShow;
 
   bool _isQualitySheetOpen = false;
 
@@ -41,13 +45,27 @@ class BrowserViewModel extends ChangeNotifier {
       notifyListeners();
     };
 
-    _videoFinderService.onVideoFound = (sources) {
-      if (_isQualitySheetOpen || sources.isEmpty) return;
-      _sourcesToShow = sources;
-      notifyListeners();
-    };
+    // JS에서 데이터가 오면 ViewModel의 상태를 업데이트
+    _videoFinderService.onVideoFound = (payload) {
+      if (_isQualitySheetOpen) return;
 
-    _webViewService.init(_videoFinderService.javascriptToInject);
+      final List sources = payload['sources'] as List;
+      final sourcesList = sources
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final duration = (payload['duration'] as num?)?.toDouble();
+
+      if (sourcesList.isNotEmpty) {
+        _setSourcesToShow(sourcesList, duration);
+      }
+    };
+  }
+
+  // sources와 duration을 함께 받아 상태를 업데이트하는 내부 메서드
+  void _setSourcesToShow(List<Map<String, dynamic>> sources, double? duration) {
+    _sourcesToShow = sources;
+    _durationToShow = duration;
+    notifyListeners();
   }
 
   void go(BuildContext context) {
@@ -90,6 +108,7 @@ class BrowserViewModel extends ChangeNotifier {
 
   void clearSourcesToShow() {
     _sourcesToShow = null;
+    _durationToShow = null;
   }
 
   void setQualitySheetOpen(bool isOpen) {

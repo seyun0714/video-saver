@@ -1,4 +1,5 @@
 // lib/core/services/webview_service.dart
+import 'package:flutter/services.dart'; // 추가
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,12 +8,9 @@ final webViewServiceProvider = Provider((ref) => WebViewService());
 class WebViewService {
   InAppWebViewController? webViewController;
   PullToRefreshController? pullToRefreshController;
-
   Function(double)? onProgressChanged;
-  String _javascriptToInject = '';
 
-  void init(String javascriptToInject) {
-    _javascriptToInject = javascriptToInject;
+  WebViewService() {
     pullToRefreshController = PullToRefreshController(
       onRefresh: () async {
         await webViewController?.reload();
@@ -29,7 +27,10 @@ class WebViewService {
     WebUri? url,
   ) async {
     pullToRefreshController?.endRefreshing();
-    await controller.evaluateJavascript(source: _javascriptToInject);
+    final javascriptToInject = await rootBundle.loadString(
+      'assets/js/video_observer.js',
+    );
+    await controller.evaluateJavascript(source: javascriptToInject);
   }
 
   void onProgress(InAppWebViewController controller, int progress) {
