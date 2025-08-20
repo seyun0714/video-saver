@@ -9,6 +9,18 @@ const debouncedRun = () => {
   window.debounceTimer = setTimeout(findAllVideos, 500);
 };
 
+function getResolutionLabel(w, h) {
+  if (!w || !h) return null;
+  const shortSide = Math.min(w, h);
+  if (shortSide >= 2160) return '4K';
+  if (shortSide >= 1440) return '1440p';
+  if (shortSide >= 1080) return '1080p';
+  if (shortSide >= 720) return '720p';
+  if (shortSide >= 480) return '480p';
+  if (shortSide >= 360) return '360p';
+  return `${shortSide}p`;
+}
+
 function addDownloadButton(video) {
   const parent = video.parentElement;
   if (!parent || parent.querySelector('.video-saver-btn')) {
@@ -47,17 +59,24 @@ function addDownloadButton(video) {
     
     sourceTags.forEach(source => {
       if (source.src && !source.src.startsWith('blob:')) {
-        sources.push({ url: source.src, label: source.getAttribute('size') || source.getAttribute('title') || 'SD' });
+        const resLabel = getResolutionLabel(source.getAttribute('width'), source.getAttribute('height')) || source.getAttribute('res');
+        const label = resLabel || source.getAttribute('size') || source.getAttribute('title') || 'SD';
+        sources.push({ url: source.src, label: label });
       }
     });
 
     if (sources.length === 0 && video.currentSrc && !video.currentSrc.startsWith('blob:')) {
-       sources.push({ url: video.currentSrc, label: 'Default' });
+       const label = getResolutionLabel(video.videoWidth, video.videoHeight) || 'Default';
+       sources.push({ url: video.currentSrc, label: label });
     }
     
     if (sources.length > 0) {
       console.log(`VideoSaver: Found ${sources.length} source(s). Calling Flutter.`);
-      window.flutter_inappwebview.callHandler('onVideoFound', JSON.stringify({ sources: sources }));
+      const payload = {
+        sources: sources,
+        duration: video.duration || 0
+      };
+      window.flutter_inappwebview.callHandler('onVideoFound', JSON.stringify(payload));
     } else {
       console.log("VideoSaver: No downloadable sources found for this video.");
     }
@@ -66,15 +85,24 @@ function addDownloadButton(video) {
   parent.appendChild(btn);
 }
 
-function findAllVideos() {
-  document.querySelectorAll('video').forEach(addDownloadButton);
-  document.querySelectorAll('iframe').forEach(frame => {
+function findAllVideos(rootNode = document.body) {
+  // 1. 현재 노드에서 비디오와 아이프레임 검색
+  rootNode.querySelectorAll('video').forEach(addDownloadButton);
+  rootNode.querySelectorAll('iframe').forEach(frame => {
     try {
       const doc = frame.contentDocument || frame.contentWindow.document;
       if (doc) {
-        doc.querySelectorAll('video').forEach(addDownloadButton);
+        findAllVideos(doc.body); // 아이프레임 내부도 재귀적으로 탐색
       }
     } catch (e) { /* Cross-origin iframe */ }
+  });
+
+  // 2. 현재 노드의 Shadow DOM 내부를 재귀적으로 탐색
+  const shadowRoots = rootNode.querySelectorAll('*');
+  shadowRoots.forEach(el => {
+    if (el.shadowRoot) {
+      findAllVideos(el.shadowRoot);
+    }
   });
 }
 

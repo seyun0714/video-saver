@@ -1,14 +1,11 @@
 // lib/features/browser/viewmodel/browser_viewmodel.dart
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:video_saver/core/services/download_service.dart';
 import 'package:video_saver/core/services/webview_service.dart';
 import 'package:video_saver/features/browser/services/video_finder_service.dart';
 import 'package:video_saver/features/downloads/provider/download_provider.dart';
-import 'package:video_saver/features/settings/provider/settings_provider.dart';
 
 final browserViewModelProvider = ChangeNotifierProvider.autoDispose(
   (ref) => BrowserViewModel(ref),
